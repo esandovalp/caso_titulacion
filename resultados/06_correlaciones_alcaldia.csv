@@ -1,0 +1,8 @@
+x,y,rho_spearman,p
+tasa_100k,cifra_negra,-0.6088,0.0123
+tasa_100k,pct_inseguro_ciudad,-0.6471,0.0067
+pct_inseguro_ciudad,cifra_negra,0.6676,0.0047
+pct_policia_SSC_poco_nada_efectiva,cifra_negra,-0.1941,0.4713
+pct_gobierno_poco_nada_efectivo,cifra_negra,0.2735,0.3053
+llamadas_por_carpeta (911/FGJ),cifra_negra,0.6059,0.0129
+llamadas_por_carpeta (911/FGJ),pct_inseguro_ciudad,0.7412,0.001

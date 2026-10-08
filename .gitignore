@@ -1,0 +1,19 @@
+.DS_Store
+.claude/settings.local.json
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Datos fuente descargados; se conservan localmente y no se publican en GitHub.
+/AGEB/
+/ENDIREH/
+/ENSU/
+/911_llamadas_datos/*.csv
+/carpetas-datos/*.csv
+/conjunto_de_datos_envipe_2025_csv/
+/conjunto_de_datos_envipe_2025_csv.zip
+/informacion-caso/
+
+# Material de referencia y documentos de trabajo no redistribuibles.
+/*.pdf
