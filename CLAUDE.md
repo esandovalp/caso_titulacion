@@ -60,11 +60,13 @@ Plan de trabajo vigente y estructura del deck: **`PLAN_15_OCT.md`**.
 uv sync                                        # instalar dependencias (Python 3.13 fijado en .python-version, .venv en la raíz)
 uv run python notebooks/build_eda.py           # regenera notebooks/EDA_encuadre1.ipynb desde el .py
 uv run jupyter nbconvert --to notebook --execute --inplace notebooks/EDA_encuadre1.ipynb
-uv run python notebooks/build_eda2.py          # tarea 1.2: equivalencias 911 ↔ FGJ (~25 s al ejecutar)
+uv run python notebooks/build_eda2.py          # tarea 1.2 + experimentos 2.1, 2.3 y 2.6
 uv run jupyter nbconvert --to notebook --execute --inplace notebooks/EDA2_equivalencias_911_fgj.ipynb
+uv run python notebooks/build_eda3.py          # experimento 2.4: H3 y calibradores (~1 min al ejecutar)
+uv run jupyter nbconvert --to notebook --execute --inplace notebooks/EDA3_validacion_calibracion.ipynb
 ```
 
-Ambos comandos se ejecutan desde la raíz. La ejecución completa tarda varios minutos (bootstrap de 1,000 réplicas + uniones espaciales sobre 2.1 M filas).
+Los tres pares de comandos se ejecutan desde la raíz. La ejecución completa tarda varios minutos (bootstrap de 1,000 réplicas + uniones espaciales sobre 2.1 M filas).
 
 ## Arquitectura
 
@@ -80,7 +82,9 @@ notebooks/build_eda.py  →  notebooks/EDA_encuadre1.ipynb  →  resultados/*.cs
 
 El notebook mantiene estado entre secciones (`fgj`, `ageb`, `alc`/`alc2`/`alc3`, `cmp`, `ag`, `tab_alc`, `covs`), así que las celdas no son independientes y el orden importa. La sección 10 exporta los ocho CSV (`01_`–`08_`) a `resultados/` a partir de esas variables; agregar una tabla implica agregarla ahí también.
 
-`build_eda2.py` → `EDA2_equivalencias_911_fgj.ipynb` sigue el mismo patrón y exporta `09_` y `10_` (tabla de equivalencias 911 ↔ FGJ en la ventana común 2019 + jul-2021 → abr-2022). La sección 8 (experimento 2.1) exporta `11_ageb_brecha_por_delito.csv`. Los experimentos siguientes continúan la numeración en `12_`.
+`build_eda2.py` → `EDA2_equivalencias_911_fgj.ipynb` sigue el mismo patrón y exporta `09_` y `10_` (tabla de equivalencias 911 ↔ FGJ en la ventana común 2019 + jul-2021 → abr-2022). La sección 8 (experimento 2.1) exporta `11_ageb_brecha_por_delito.csv`; la 9 (experimento 2.3) `13_variacion_brecha_ageb_vs_alcaldia.csv`; la 10 (experimento 2.6) las figuras de `resultados/figuras/`.
+
+`build_eda3.py` → `EDA3_validacion_calibracion.ipynb` (experimento 2.4) es el tercer script, separado porque trae fuentes nuevas (ENDIREH, ENSU, ENVIPE) y no equivalencias 911 ↔ FGJ. **Lee `resultados/11_` y no recalcula la brecha, los grupos ni los conteos**; exporta `14_validacion_caso_calibracion.csv`. Los experimentos siguientes continúan la numeración en `15_` (`12_` quedó reservado para las covariables de RESAGEBURB del 2.2).
 
 Estructura del notebook: 1 inventario · 2 ENVIPE (2.1 bootstrap Rao-Wu) · 3 FGJ · 4 covariables Censo AGEB · 5 ENSU · 6 911 (6.1 unión espacial a AGEB) · 7 fricción de joins · 8 evaluación del encuadre · 9 preguntas probables de sinodales · 10 exportación.
 

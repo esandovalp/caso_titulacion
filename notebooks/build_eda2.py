@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import statsmodels.api as sm
-from scipy import optimize, stats
+from scipy import optimize, special, stats
 
 warnings.filterwarnings("ignore")
 pd.set_option("display.max_columns", 50, "display.width", 200, "display.max_colwidth", 120, "display.float_format", "{:,.3f}".format)
@@ -900,6 +900,710 @@ assert len(out) == 2 * len(VENT) * len(ageb) and not out.duplicated(["delito", "
 out.to_csv(OUT / "11_ageb_brecha_por_delito.csv", index=False)
 print(out.shape); display(out.groupby(["delito", "ventana"])[["llamadas", "carpetas"]].sum())
 sorted(p.name for p in OUT.glob("*.csv"))
+""")
+
+md(r"""
+## 9. Experimento 2.3 — H1: ¿la brecha varía más entre AGEB que entre alcaldías? (`resultados/13_`)
+
+**H1** *(regla de decisión fijada el 8 de oct de 2026 en `PLAN_15_OCT.md` §3.3, antes de calcular cualquier componente de varianza)*: en violencia familiar, la brecha llamadas/carpeta varía más entre AGEB que entre alcaldías, y más de lo que daría el azar.
+
+Esta sección **no recalcula la brecha ni los conteos**: lee `vf`, `rc` y `G` de la sección 8, que es lo mismo que `resultados/11_ageb_brecha_por_delito.csv`.
+
+**Por qué no se descompone la varianza cruda de la razón.** La varianza de llamadas/carpeta entre AGEB mezcla dos cosas: variación territorial real y ruido de conteo. El ruido es mayor justo donde hay menos eventos, así que la varianza cruda ordenaría los territorios por volumen y no por fricción. Se trabaja en el **log de la brecha**, que es el logit de p = llamadas / (llamadas + carpetas): condicionando en n = llamadas + carpetas, llamadas ~ Binomial(n, p), log(brecha) = logit(p) y **la varianza de conteo es conocida en forma cerrada**.
+
+**Modelo** (los componentes están en la escala del log de la brecha):
+
+> log(brecha)_{g,w} = mu + delta_w + A_{alcaldia(g)} + B_g + I_{g,w} + e_{g,w},  Var(e_{g,w}) conocida
+
+- `var_alcaldia` = Var(A): entre las 16 alcaldías.
+- `var_unidad` = Var(B): entre AGEB **dentro** de la alcaldía (o entre grupos de H3, en el contraste).
+- `var_interaccion` = Var(I): AGEB × ventana, la parte de la brecha de un AGEB que **no** se repite entre ventanas. Solo se identifica con las dos ventanas juntas; es la contraparte del rho = 0.30 de la sección 8.5.
+- `delta_w`: efecto fijo de ventana, que absorbe la caída de nivel 1.00 → 0.82.
+
+**Estimación por momentos, no con un GLMM.** Se usa el logit empírico con corrección de 0.5 (y = log((llamadas+0.5)/(carpetas+0.5)), v = 1/(llamadas+0.5) + 1/(carpetas+0.5)) y se resta la varianza binomial esperada con las esperanzas exactas del diseño anidado desbalanceado. *Supuesto:* uso momentos con la varianza binomial conocida asumiendo que el ruido dentro de un AGEB y ventana es binomial dado n; si hubiera sobredispersión extra dentro del AGEB (rachas de llamadas por el mismo hecho), `var_unidad` quedaría sobreestimada, y por eso se verifica la sobredispersión en 9.4 y se contrasta con una beta-binomial. Las tres razones para no usar un GLMM binomial con efectos aleatorios de alcaldía y AGEB están en el §3.3: las nulas exigen ~42,000 reajustes, el efecto aleatorio de ~2,400 niveles con 1–2 observaciones cada uno es donde menos sirven las aproximaciones de Laplace o variacionales, y la varianza binomial conocida hace exacta la corrección por momentos. **Lo importante:** las nulas se simulan con el *mismo* estimador, así que los valores p son válidos aunque el estimador tuviera sesgo de orden 1/n.
+
+**Universo y peso.** Unidad = AGEB con **≥ 1 carpeta en cada ventana**, con **peso igual por AGEB**. *Supuesto:* peso igual porque la pregunta es cuánto varía la brecha entre territorios, no entre eventos; con peso por precisión (1/v) el resultado hablaría sobre todo del centro de la ciudad.
+
+**Las dos pruebas** (§3.3): **(a)** `var_unidad` observada contra una nula de homogeneidad (cada unidad con la p de su alcaldía y ventana; llamadas ~ Binomial(n observado, p), 1,000 simulaciones, semilla 2026); **(b)** IC 95% bootstrap de `var_unidad / var_alcaldia` enteramente por encima de 1 (1,000 réplicas, remuestreo de AGEB **dentro** de cada alcaldía conservando su tamaño, semilla 2026), con el ICC de alcaldía contra una nula de permutación de etiquetas de alcaldía como contexto. **H1 se acepta solo si (a) y (b) se cumplen.**
+
+**Autocorrelación espacial:** no invalida la nula de (a), que se simula unidad por unidad bajo homogeneidad; sí hace que `var_unidad` pueda ser un gradiente suave sub-alcaldía y no AGEB independientes (eso lo separa el I de Moran del 2.5). Para (b) la nula de permutación es **conservadora**: una partición arbitraria en 16 grupos tiene menos varianza entre grupos que una partición contigua, así que le facilita a la alcaldía parecer informativa. Por eso (b) se decide con el IC bootstrap de la razón.
+""")
+
+md("### 9.1 Estimador: componentes de varianza con la varianza binomial restada")
+code(r"""
+ALC_DE_AGEB = ageb.set_index("ageb").alcaldia
+ALC = sorted(ageb.alcaldia.unique())
+A_COD = {a: i for i, a in enumerate(ALC)}
+K_ALC = len(ALC)
+B_REP = 1000
+SEMILLA = 2026
+
+def _oneway(m, nu, g, K):
+    # Anidado desbalanceado con varianza de ruido nu_g conocida por unidad.
+    # Var(m_g) = s2_alc + s2_unidad + nu_g. Esperanzas exactas de las sumas de cuadrados.
+    k = np.bincount(g, minlength=K).astype(float)
+    nz = k > 0
+    sm = np.bincount(g, weights=m, minlength=K)
+    mb = np.zeros(K); mb[nz] = sm[nz] / k[nz]
+    ss_w = float(((m - mb[g]) ** 2).sum())
+    nu_a = np.bincount(g, weights=nu, minlength=K)
+    den = float((k[nz] - 1).sum())
+    s2u = (ss_w - float((nu_a[nz] * (1 - 1 / k[nz])).sum())) / den if den > 0 else np.nan
+    tau = max(s2u, 0.0) + nu                      # varianza residual de m_g una vez fijada la alcaldía
+    tau_a = np.bincount(g, weights=tau, minlength=K)
+    N = float(k.sum()); gm = float(m.sum()) / N
+    ss_b = float((k[nz] * (mb[nz] - gm) ** 2).sum())
+    c = N - float((k ** 2).sum()) / N             # (N - sum k_a^2 / N), coeficiente del diseño desbalanceado
+    s2a = (ss_b - float((tau_a[nz] / k[nz]).sum()) + float(tau.sum()) / N) / c
+    return s2a, s2u
+
+def componentes(Y, V, g, K=K_ALC):
+    # Y, V: (n_unidades, n_ventanas). La media de columna es el efecto fijo de ventana.
+    z = Y - Y.mean(axis=0, keepdims=True)
+    vbar = V.mean(axis=1)
+    if Y.shape[1] == 2:
+        s2i = float(((z[:, 0] - z[:, 1]) ** 2 / 2).mean() - vbar.mean())
+        nu = vbar / 2 + max(s2i, 0.0) / 2         # Var(media de las dos ventanas) = ... + s2_int/2 + vbar/2
+    else:
+        s2i = np.nan
+        nu = vbar
+    s2a, s2u = _oneway(z.mean(axis=1), nu, g, K)
+    return s2a, s2u, s2i
+
+def icc_razon(s2a, s2u, s2i):
+    a, u = max(s2a, 0.0), max(s2u, 0.0)
+    i = 0.0 if (s2i is None or np.isnan(s2i)) else max(s2i, 0.0)
+    tot = a + u + i
+    icc = a / tot if tot > 0 else np.nan
+    raz = u / a if a > 0 else (np.inf if u > 0 else np.nan)
+    return icc, raz
+
+def y_v(ll_y, ll_n, car):
+    # logit empirico: y usa el numerador efectivo (puede no ser entero), v usa el conteo observado
+    return np.log((ll_y + 0.5) / (car + 0.5)), 1.0 / (ll_n + 0.5) + 1.0 / (car + 0.5)
+print("estimador listo")
+""")
+
+md("### 9.2 Armado de las variantes y universo")
+code(r"""
+Wvf = vf[["llamadas", "llamadas_afirmativas", "carpetas", "llamadas_robo_desc_s1"]].unstack("ventana")
+LLA = Wvf["llamadas"][VENT].to_numpy(float)
+LLF = Wvf["llamadas_afirmativas"][VENT].to_numpy(float)
+CAR = Wvf["carpetas"][VENT].to_numpy(float)
+DESC = Wvf["llamadas_robo_desc_s1"][VENT].to_numpy(float)
+G_VF = np.array([A_COD[a] for a in ALC_DE_AGEB.reindex(Wvf.index)])
+
+V_PRIN = "principal: todas las llamadas, >= 1 carpeta por ventana"
+V_UMB = f"sensibilidad: solo AGEB con >= {UMBRAL} carpetas por ventana"
+V_S1 = "sensibilidad: 19% de robo descontado (S1)"
+V_AFI = "sensibilidad: solo llamadas afirmativas"
+V_GRU = "contraste a igual unidad: agregada a los grupos de H3"
+
+def spec_vf(variante, ventanas):
+    m = (CAR >= UMBRAL).all(1) if variante == V_UMB else (CAR >= 1).all(1)
+    j = [VENT.index(w) for w in ventanas]
+    sel = np.ix_(m, j)
+    car = CAR[sel]
+    if variante == V_AFI:
+        lln = LLF[sel]; lly = lln
+    elif variante == V_S1:
+        lln = LLA[sel]; lly = lln - DESC[sel]
+    else:
+        lln = LLA[sel]; lly = lln
+    return dict(delito="violencia_familiar", unidad="AGEB", variante=variante,
+                ventana="ambas" if len(j) == 2 else ventanas[0],
+                lly=lly, lln=lln, car=car, g=G_VF[m], n_llamadas=lly.sum(), n_carpetas=car.sum())
+
+def spec_rc(ventana):
+    gg = G.xs(ventana)
+    gg = gg[gg.cumple_umbral]
+    lln = gg.llamadas.to_numpy(float)[:, None]; car = gg.carpetas.to_numpy(float)[:, None]
+    return dict(delito="robo_conductor", unidad="grupo_h3", variante="contraste: grupos de H3 (regla del 5 de oct)",
+                ventana=ventana, lly=lln, lln=lln, car=car,
+                g=np.array([A_COD[a] for a in gg.alcaldia]), n_llamadas=lln.sum(), n_carpetas=car.sum())
+
+GRUPO_DE_AGEB = rc.grupo_h3.groupby("ageb").first()
+def spec_vf_grupos(ventana):
+    # Agregada a los MISMOS grupos de H3, para que el contraste con robo a conductor compare unidades del mismo tamano
+    q = vf.xs(ventana)[["llamadas", "carpetas"]].copy()
+    q["grupo_h3"] = GRUPO_DE_AGEB.reindex(q.index)
+    ok = G.xs(ventana).cumple_umbral
+    q = q[q.grupo_h3.map(ok).fillna(False).to_numpy()].groupby("grupo_h3").sum()
+    lln = q.llamadas.to_numpy(float)[:, None]; car = q.carpetas.to_numpy(float)[:, None]
+    alc_g = {gr: a for gr, a in zip(G.xs(ventana).index, G.xs(ventana).alcaldia)}
+    return dict(delito="violencia_familiar", unidad="grupo_h3", variante=V_GRU, ventana=ventana,
+                lly=lln, lln=lln, car=car, g=np.array([A_COD[alc_g[gr]] for gr in q.index]),
+                n_llamadas=lln.sum(), n_carpetas=car.sum())
+
+def completa(sp):
+    sp["Y"], sp["V"] = y_v(sp["lly"], sp["lln"], sp["car"])
+    sp["fac"] = np.where(sp["lln"] > 0, sp["lly"] / np.maximum(sp["lln"], 1e-12), 1.0)
+    n_tot = (sp["lln"] + sp["car"]).round().astype(np.int64)
+    num = np.column_stack([np.bincount(sp["g"], weights=sp["lln"][:, c], minlength=K_ALC) for c in range(n_tot.shape[1])])
+    tot = np.column_stack([np.bincount(sp["g"], weights=n_tot[:, c].astype(float), minlength=K_ALC) for c in range(n_tot.shape[1])])
+    p_cel = np.divide(num, tot, out=np.full_like(num, 0.5), where=tot > 0)
+    sp["n_tot"], sp["P"], sp["p_cel"] = n_tot, p_cel[sp["g"]], p_cel
+    sp["n_unidades"] = len(sp["g"]); sp["n_alcaldias"] = int((np.bincount(sp["g"], minlength=K_ALC) > 0).sum())
+    return sp
+
+SPECS = [completa(spec_vf(v, w)) for v in (V_PRIN, V_UMB, V_S1, V_AFI) for w in (VENT, ["2019"], ["2021-22"])]
+SPECS += [completa(spec_vf_grupos(w)) for w in VENT]
+SPECS += [completa(spec_rc(w)) for w in VENT]
+print("Llamadas afirmativas por AGEB y ventana (media / mediana):",
+      {w: (round(LLF[(CAR >= 1).all(1), i].mean(), 2), float(np.median(LLF[(CAR >= 1).all(1), i]))) for i, w in enumerate(VENT)})
+print(f"AGEB con >= 1 carpeta en cada ventana: {int((CAR >= 1).all(1).sum()):,} de {len(CAR):,} "
+      f"(cubren {CAR[(CAR >= 1).all(1)].sum() / CAR.sum():.3%} de las carpetas y {LLA[(CAR >= 1).all(1)].sum() / LLA.sum():.3%} de las llamadas de violencia familiar)")
+print(f"AGEB con >= {UMBRAL} carpetas en cada ventana: {int((CAR >= UMBRAL).all(1).sum()):,} "
+      f"(cubren {CAR[(CAR >= UMBRAL).all(1)].sum() / CAR.sum():.3%} de las carpetas)")
+display(pd.DataFrame([{k: s[k] for k in ("delito", "variante", "ventana", "unidad", "n_unidades", "n_alcaldias", "n_llamadas", "n_carpetas")} for s in SPECS]))
+""")
+
+md(r"""
+**Lectura (universo y variantes):** la prueba corre sobre **2,294 de los 2,433 AGEB**, los que tienen al menos una carpeta de violencia familiar en **cada** ventana; cubren **99.5% de las carpetas y 99.1% de las llamadas**. Los 139 que quedan fuera tienen cero carpetas en alguna ventana, así que su log de la brecha no existe. La sensibilidad de ≥ 12 carpetas por ventana deja 698 AGEB (el mismo universo de la prueba de estabilidad de 8.5) con 55.3% de las carpetas. Las llamadas **afirmativas** son 1.6 (2019) y 2.4 (2021–22) por AGEB en promedio, con mediana 1: hay que esperar que esa sensibilidad sea la más frágil, y lo es (9.3).
+""")
+
+md("### 9.3 Nulas por permutación y simulación, e IC bootstrap")
+code(r"""
+def nula_homogeneidad(sp, B=B_REP, semilla=SEMILLA):
+    # (a) cada unidad con la p de su alcaldia y ventana; n observado fijo
+    rng = np.random.default_rng(semilla)
+    out = np.empty((B, 2))
+    for b in range(B):
+        ll = rng.binomial(sp["n_tot"], sp["P"]).astype(float)
+        car = sp["n_tot"] - ll
+        Y, V = y_v(sp["fac"] * ll, ll, car)
+        s2a, s2u, s2i = componentes(Y, V, sp["g"])
+        out[b] = (s2u, s2i if sp["Y"].shape[1] == 2 else np.nan)
+    return out
+
+def nula_etiquetas(sp, s2i_obs, B=B_REP, semilla=SEMILLA):
+    # (b) reasigna alcaldias a las unidades conservando el tamano de cada alcaldia
+    rng = np.random.default_rng(semilla)
+    z = sp["Y"] - sp["Y"].mean(axis=0, keepdims=True)
+    vbar = sp["V"].mean(axis=1)
+    nu = vbar / 2 + max(0.0, 0.0 if np.isnan(s2i_obs) else s2i_obs) / 2 if sp["Y"].shape[1] == 2 else vbar
+    m = z.mean(axis=1)
+    out = np.empty(B)
+    for b in range(B):
+        s2a, s2u = _oneway(m, nu, rng.permutation(sp["g"]), K_ALC)
+        out[b] = icc_razon(s2a, s2u, s2i_obs)[0]
+    return out
+
+def bootstrap(sp, B=B_REP, semilla=SEMILLA):
+    # remuestreo de unidades DENTRO de cada alcaldia, conservando su tamano
+    rng = np.random.default_rng(semilla)
+    ix = [np.where(sp["g"] == a)[0] for a in range(K_ALC)]
+    ix = [i for i in ix if len(i)]
+    Y, V, g = sp["Y"], sp["V"], sp["g"]
+    out = np.empty((B, 5))
+    for b in range(B):
+        s = np.concatenate([rng.choice(i, len(i), replace=True) for i in ix])
+        s2a, s2u, s2i = componentes(Y[s], V[s], g[s])
+        out[b] = (s2a, s2u, s2i, *icc_razon(s2a, s2u, s2i))
+    return out
+
+def evalua(sp):
+    s2a, s2u, s2i = componentes(sp["Y"], sp["V"], sp["g"])
+    icc, raz = icc_razon(s2a, s2u, s2i)
+    bo = bootstrap(sp)
+    q = lambda c: np.nanpercentile(bo[:, c], [2.5, 97.5])
+    na = nula_homogeneidad(sp)
+    nb = nula_etiquetas(sp, s2i)
+    pa = (1 + (na[:, 0] >= s2u).sum()) / (B_REP + 1)
+    pai = (1 + (na[:, 1] >= s2i).sum()) / (B_REP + 1) if sp["Y"].shape[1] == 2 else np.nan
+    interp = bool(s2u > 0)
+    pb = (1 + (nb >= icc).sum()) / (B_REP + 1) if interp else np.nan
+    # sobredispersion de Pearson con p de alcaldia x ventana
+    mu = sp["n_tot"] * sp["P"]
+    pear = ((sp["lln"] - mu) ** 2 / np.maximum(mu * (1 - sp["P"]), 1e-9)).sum()
+    gl = sp["n_tot"].size - int((np.bincount(sp["g"], minlength=K_ALC) > 0).sum()) * sp["n_tot"].shape[1]
+    ok_a = interp and (s2u > np.percentile(na[:, 0], 95)) and (pa <= 0.05)
+    ok_b = interp and (q(4)[0] > 1)
+    nan_si = lambda x: x if interp else np.nan
+    u = sp["unidad"]
+    fila = {**{k: sp[k] for k in ("delito", "variante", "ventana", "unidad", "n_unidades", "n_alcaldias")},
+            "n_llamadas": sp["n_llamadas"], "n_carpetas": sp["n_carpetas"],
+            "var_alcaldia": s2a, "var_alcaldia_ic95_inf": q(0)[0], "var_alcaldia_ic95_sup": q(0)[1],
+            "var_unidad": s2u, "var_unidad_ic95_inf": q(1)[0], "var_unidad_ic95_sup": q(1)[1],
+            "var_interaccion": s2i, "var_interaccion_ic95_inf": q(2)[0], "var_interaccion_ic95_sup": q(2)[1],
+            "icc_alcaldia": nan_si(icc), "icc_alcaldia_ic95_inf": nan_si(q(3)[0]), "icc_alcaldia_ic95_sup": nan_si(q(3)[1]),
+            "razon_unidad_alcaldia": nan_si(raz), "razon_ic95_inf": nan_si(q(4)[0]), "razon_ic95_sup": nan_si(q(4)[1]),
+            "estadistico_a": s2u, "p95_nula_a": np.percentile(na[:, 0], 95), "p_perm_a": pa,
+            "p_perm_a_interaccion": pai,
+            "estadistico_b": nan_si(icc), "p95_nula_b": nan_si(np.percentile(nb, 95)), "p_perm_b": pb,
+            "sobredispersion_pearson": pear / gl, "interpretable": interp,
+            "veredicto_a": (f"variacion real entre {u}" if ok_a else "no se distingue del ruido de conteo") if interp
+                           else "no interpretable: varianza corregida negativa",
+            "veredicto_b": (f"mas entre {u} que entre alcaldias" if ok_b else "no se puede afirmar") if interp else "no interpretable"}
+    if not interp:
+        fila["veredicto_h1"] = "no concluyente: conteos demasiado chicos para corregir el ruido"
+    elif sp["delito"] == "robo_conductor" or sp["variante"] == V_GRU:
+        fila["veredicto_h1"] = "contraste (debil por diseno), no prueba de H1"
+    elif ok_a and ok_b:
+        fila["veredicto_h1"] = "H1 se acepta"
+    elif ok_a:
+        fila["veredicto_h1"] = "variacion real, pero no mas fina que la alcaldia"
+    else:
+        fila["veredicto_h1"] = "H1 se refuta (falla (a))"
+    return fila
+
+h1 = pd.DataFrame([evalua(s) for s in SPECS])
+display(h1[["delito", "variante", "ventana", "n_unidades", "var_alcaldia", "var_unidad", "var_interaccion",
+            "icc_alcaldia", "razon_unidad_alcaldia", "p_perm_a", "p_perm_b", "veredicto_h1"]])
+display(h1[h1.variante == V_PRIN].set_index("ventana")[["var_alcaldia", "var_alcaldia_ic95_inf", "var_alcaldia_ic95_sup",
+    "var_unidad", "var_unidad_ic95_inf", "var_unidad_ic95_sup", "var_interaccion", "icc_alcaldia",
+    "icc_alcaldia_ic95_inf", "icc_alcaldia_ic95_sup", "razon_ic95_inf", "estadistico_a", "p95_nula_a", "p_perm_a"]].T)
+""")
+
+md(r"""
+**Lectura (H1):** **H1 se acepta.** Con las dos ventanas juntas y efecto fijo de ventana, sobre 2,294 AGEB (47,828 llamadas y 53,050 carpetas):
+
+| componente (escala: log de la brecha) | estimación | IC 95% bootstrap | 1 desv. est. en brecha relativa |
+|---|---|---|---|
+| entre **alcaldías** (σ²_alc) | **0.021** | 0.016 – 0.030 | ×1.16 |
+| entre **AGEB** dentro de la alcaldía (σ²_ageb) | **0.102** | 0.072 – 0.127 | ×1.38 |
+| **AGEB × ventana** (σ²_int) | 0.070 | 0.039 – 0.101 | ×1.30 |
+| **ICC de alcaldía** | **0.110** | 0.085 – 0.158 | — |
+| **razón σ²_ageb / σ²_alc** | **4.82** | **2.81 – 6.44** | — |
+
+- **(a) Hay variación real entre AGEB.** σ̂²_ageb = 0.102 contra un percentil 95 de la nula de homogeneidad de **−0.012**: **p = 0.001**, el mínimo posible con 1,000 simulaciones (ninguna la alcanzó). La nula está centrada **por debajo de cero** porque la corrección de 0.5 del logit empírico encoge y la resta del ruido queda un poco larga; por eso la prueba se hace contra la nula simulada y no contra cero, y por eso el estimador puntual es **conservador** (9.4, calibración).
+- **(b) Varía más entre AGEB que entre alcaldías.** El IC 95% bootstrap de la razón queda **enteramente por encima de 1** (2.81 – 6.44), así que (b) se cumple con la regla del §3.3. La alcaldía se queda con el **11% de la varianza** (ICC 0.110; IC 0.085–0.158) y el 89% es sub-alcaldía: 53% entre AGEB y 36% AGEB × ventana. En términos de la brecha: entre dos AGEB de la misma alcaldía, una desviación estándar equivale a una brecha **38% mayor o menor**; entre dos alcaldías, solo **16%**.
+- *Contexto de la nula de etiquetas:* el ICC observado (0.110) **sí** supera el percentil 95 de reasignar alcaldías al azar conservando su tamaño (0.010; p = 0.001). Es decir, las fronteras de alcaldía **no son irrelevantes** —captan más que una partición arbitraria—, solo son el grano equivocado: explican una novena parte de lo que explica el AGEB. Y esa nula es conservadora con autocorrelación espacial (§3.3), así que el 11% es un techo generoso para la alcaldía.
+- **σ²_int = 0.070 es del mismo orden que σ²_ageb = 0.102** (p = 0.001 contra su propia nula): un tercio largo de la variación territorial de un AGEB **no se repite** entre 2019 y 2021–22. Es la misma cosa que el ρ = 0.30 de 8.5 vista desde la varianza, y la razón por la que el mapa del 2.6 debe pintar el promedio de las dos ventanas y no una sola.
+
+**Robustez, como exigía el §3.3:** el veredicto se repite en **9 de las 9 filas interpretables**.
+- *Por ventana:* 2019 razón 16.6 (IC 7.7–25.0), ICC 0.057; 2021–22 razón 3.14 (IC 1.74–4.32), ICC 0.241. En una sola ventana σ²_ageb y σ²_int no se separan, así que el 0.228 de 2019 y el 0.109 de 2021–22 son la suma de ambos. **La alcaldía pesa cuatro veces más en 2021–22 que en 2019** (ICC 0.24 vs 0.06): el cambio de nivel de la brecha entre ventanas no fue parejo entre alcaldías. Hay que decirlo, porque matiza S4: el orden de los AGEB se repite, pero el nivel se movió de forma distinta en cada alcaldía.
+- *Solo AGEB con ≥ 12 carpetas (698):* razón 5.01 (IC 2.10–7.32), ICC 0.099, casi idéntico al principal. **El resultado no lo producen los AGEB de conteo bajo.**
+- *Con 19% de robo descontado (S1):* razón 3.10 (IC 1.82–4.19), ICC 0.084. Sigue aceptándose, pero el descuento **sube** σ²_alc (0.021 → 0.044) y sobre todo σ²_int (0.070 → 0.345), porque el robo a casa que se descuenta es él mismo territorial y cambia entre ventanas. Es exactamente lo que S1 temía, y aun así no invierte ninguno de los dos veredictos: la contaminación añade ruido territorial, no reordena quién varía más.
+- *Solo llamadas afirmativas:* **no concluyente, no contraria.** Con 1.6 y 2.4 llamadas afirmativas por AGEB, la mayoría de los AGEB tiene cero, el logit empírico las encoge a log(0.5/(carpetas+0.5)) y la varianza binomial nominal (1/0.5 = 2) sobrepasa a la varianza real de ese valor encogido: la resta del ruido da **negativo** (−0.14) y los componentes no se pueden leer. La fila se marca `interpretable = False` y no entra en el veredicto. La misma sensibilidad **sí** funciona en 8.5 (ρ = 0.24) porque una prueba de rangos no necesita corregir ruido. *Supuesto implícito que esto deja al descubierto:* uso todas las llamadas como numerador asumiendo que el código de cierre no se puede depurar igual en las dos ventanas (sección 8); con solo afirmativas el grano AGEB simplemente no tiene eventos suficientes para descomponer varianzas, y si se quisiera esa variante habría que agregar a grupos.
+""")
+
+md("### 9.4 Verificación de supuestos: sobredispersión, contraste beta-binomial y residuos por tamaño de AGEB")
+code(r"""
+sp0 = [s for s in SPECS if s["delito"] == "violencia_familiar" and s["variante"] == V_PRIN and s["ventana"] == "ambas"][0]
+
+# (i) cuanta de la varianza observada es ruido de conteo
+z0 = sp0["Y"] - sp0["Y"].mean(axis=0, keepdims=True)
+print(f"Varianza observada del log de la brecha (cruda, las dos ventanas): {z0.var(ddof=1):.4f} | "
+      f"ruido binomial esperado: {sp0['V'].mean():.4f} | razon obs/ruido: {z0.var(ddof=1) / sp0['V'].mean():.2f}")
+print(f"Sobredispersion de Pearson (p de alcaldia x ventana): {h1.loc[(h1.variante == V_PRIN) & (h1.ventana == 'ambas'), 'sobredispersion_pearson'].iloc[0]:.2f} "
+      "(1.0 = binomial puro; > 1 = hay variacion dentro de la alcaldia)")
+
+# (ii) contraste de verosimilitud: beta-binomial por alcaldia x ventana
+def bb_mle(k, n):
+    def nll(th):
+        mu, rho = 1 / (1 + np.exp(-th[0])), 1 / (1 + np.exp(-th[1]))
+        a, b = mu * (1 - rho) / rho, (1 - mu) * (1 - rho) / rho
+        return -(special.betaln(k + a, n - k + b) - special.betaln(a, b)).sum()
+    r = optimize.minimize(nll, [0.0, -4.0], method="Nelder-Mead", options={"xatol": 1e-6, "fatol": 1e-8, "maxiter": 4000})
+    mu, rho = 1 / (1 + np.exp(-r.x[0])), 1 / (1 + np.exp(-r.x[1]))
+    return mu, rho, r.success
+
+bb = []
+for c, w in enumerate(VENT):
+    for a in range(K_ALC):
+        s = sp0["g"] == a
+        if s.sum() < 5:
+            continue
+        mu, rho, okc = bb_mle(sp0["lln"][s, c], sp0["n_tot"][s, c].astype(float))
+        bb.append({"ventana": w, "alcaldia": ALC[a], "n_ageb": int(s.sum()), "mu": mu, "rho": rho,
+                   "var_logit_delta": rho / (mu * (1 - mu)), "convergio": okc})
+bb = pd.DataFrame(bb)
+pond = (bb.var_logit_delta * bb.n_ageb).sum() / bb.n_ageb.sum()
+r0 = h1[(h1.variante == V_PRIN) & (h1.ventana == "ambas")].iloc[0]
+print(f"Beta-binomial: {bb.convergio.sum()} de {len(bb)} celdas alcaldia x ventana convergieron | "
+      f"rho mediano {bb.rho.median():.4f} | Var(logit) ponderada por AGEB = {pond:.4f}")
+print(f"Momentos, misma cantidad (var_unidad + var_interaccion) = {max(r0.var_unidad, 0) + max(r0.var_interaccion, 0):.4f}  "
+      f"-> razon beta-binomial / momentos = {pond / (max(r0.var_unidad, 0) + max(r0.var_interaccion, 0)):.2f}")
+display(bb.groupby("ventana")[["mu", "rho", "var_logit_delta"]].describe(percentiles=[.5]).T)
+
+# (iii) residuos por tamano de AGEB: el estimador no debe depender del tercil de conteo
+car_med = sp0["car"].mean(axis=1)
+terc = pd.qcut(car_med, 3, labels=["bajo", "medio", "alto"])
+diag = []
+for t in ["bajo", "medio", "alto"]:
+    s = np.asarray(terc == t)
+    s2a, s2u, s2i = componentes(sp0["Y"][s], sp0["V"][s], sp0["g"][s])
+    zz = sp0["Y"][s] - sp0["Y"][s].mean(axis=0, keepdims=True)
+    diag.append({"tercil_carpetas": t, "n_ageb": int(s.sum()), "carpetas_mediana": float(np.median(car_med[s])),
+                 "var_cruda": float(zz.var(ddof=1)), "ruido_esperado": float(sp0["V"][s].mean()),
+                 "razon_obs_ruido": float(zz.var(ddof=1) / sp0["V"][s].mean()),
+                 "var_alcaldia": s2a, "var_unidad": s2u, "var_interaccion": s2i,
+                 "icc_alcaldia": icc_razon(s2a, s2u, s2i)[0]})
+diag = pd.DataFrame(diag)
+display(diag)
+
+# (iv) calibracion del estimador EN EL DISENO REAL: se inyectan componentes conocidos y se mide el sesgo
+def calibra(sp, s2a_v, s2u_v, s2i_v, R=200, semilla=SEMILLA):
+    rng = np.random.default_rng(semilla)
+    pw = sp["lln"].sum(axis=0) / sp["n_tot"].sum(axis=0)        # nivel de ciudad por ventana, igual para todas las alcaldias:
+    base = np.log(pw / (1 - pw))[None, :]                        # asi la unica verdad son los componentes inyectados
+    acc = []
+    for _ in range(R):
+        Av = rng.normal(0, np.sqrt(s2a_v), K_ALC)[sp["g"]][:, None] if s2a_v > 0 else 0.0
+        Bv = rng.normal(0, np.sqrt(s2u_v), sp["n_unidades"])[:, None] if s2u_v > 0 else 0.0
+        Iv = rng.normal(0, np.sqrt(s2i_v), sp["n_tot"].shape) if s2i_v > 0 else 0.0
+        p = 1 / (1 + np.exp(-(base + Av + Bv + Iv)))
+        ll = rng.binomial(sp["n_tot"], p).astype(float)
+        Y, V = y_v(ll, ll, sp["n_tot"] - ll)
+        acc.append(componentes(Y, V, sp["g"]))
+    a = np.array(acc)
+    e = [a[:, 0].mean(), a[:, 1].mean(), np.nanmean(a[:, 2])]
+    return {"caso": f"alc={s2a_v:.3f} unidad={s2u_v:.3f} int={s2i_v:.3f}",
+            "var_alcaldia_est": e[0], "var_unidad_est": e[1], "var_interaccion_est": e[2],
+            "sesgo_alcaldia": e[0] - s2a_v, "sesgo_unidad": e[1] - s2u_v, "sesgo_interaccion": e[2] - s2i_v,
+            "razon_verdad": (s2u_v / s2a_v) if s2a_v > 0 else np.nan,
+            "razon_est": (max(e[1], 0) / e[0]) if e[0] > 0 else np.nan}
+cal = pd.DataFrame([calibra(sp0, 0.0, 0.0, 0.0),
+                    calibra(sp0, round(max(r0.var_alcaldia, 0), 3), round(max(r0.var_unidad, 0), 3), round(max(r0.var_interaccion, 0), 3)),
+                    calibra(sp0, round(max(r0.var_unidad, 0), 3), round(max(r0.var_alcaldia, 0), 3), round(max(r0.var_interaccion, 0), 3))])
+display(cal)
+""")
+
+md(r"""
+**Lectura (supuestos verificados):** las cuatro verificaciones apuntan en la misma dirección y ninguna obliga a cambiar el veredicto.
+
+1. **El 68% de la varianza cruda del log de la brecha es ruido de conteo** (0.411 de 0.602). Esto es la justificación empírica de no descomponer la razón cruda: dos tercios de lo que se vería serían los AGEB con pocos eventos. La sobredispersión de Pearson con la p de alcaldía × ventana es **2.02**, es decir, hay el doble de dispersión que la binomial pura: hay variación real dentro de la alcaldía, que es (a) por otra vía.
+2. **Contraste beta-binomial (verosimilitud, no momentos):** las **32 de 32** celdas alcaldía × ventana convergieron; ρ mediano 0.046 (rango 0.017–0.076); llevado a la escala logit por delta y ponderado por AGEB da **Var = 0.196**, contra **0.171** de los momentos para la misma cantidad (σ²_ageb + σ²_int). Coinciden dentro del **14%**, y la beta-binomial da *más*, así que los momentos son la opción conservadora. Los dos caminos concuerdan: la variación sub-alcaldía existe y no es un artefacto del estimador.
+3. **Residuos por tamaño de AGEB:** la razón observada/ruido sube con el conteo (1.14 → 1.96 → 2.52 del tercil bajo al alto), que es lo esperado porque el ruido se encoge. Lo que importa es que **el ICC de alcaldía es estable entre terciles** (0.133 / 0.092 / 0.104): la conclusión no la fabrica un tramo de tamaño. La señal de alerta está en el tercil bajo (mediana 4.5 carpetas), donde σ²_int sale **negativo** (−0.068): ahí la corrección del ruido se pasa. Esa es justamente la sensibilidad de ≥ 12 carpetas, que da ICC 0.099.
+4. **Calibración del estimador en el diseño real** (mismos n y mismos tamaños de alcaldía, 200 réplicas, componentes inyectados conocidos):
+   - Sin variación verdadera: σ̂²_alc = **−0.000**, σ̂²_ageb = **−0.021**, σ̂²_int = **−0.043**. El estimador de alcaldía es insesgado; los de AGEB e interacción traen un desplazamiento negativo de ese orden, así que **las cifras reportadas son cotas inferiores** (los valores verdaderos rondarían 0.12 y 0.11, no 0.10 y 0.07).
+   - Con la verdad igual a lo observado (0.021 / 0.102 / 0.070): recupera **0.022 / 0.100 / 0.016** y una razón de **4.64** contra 4.86 verdadera, menos de 5% de error.
+   - **Con la verdad invertida** (alcaldía 0.102, AGEB 0.021): recupera 0.100 / 0.020 y razón **0.200** contra 0.206. Esta es la verificación que importa para (b): **el estimador no inventa predominio del AGEB cuando la verdad es que domina la alcaldía.**
+   *Supuesto:* la calibración inyecta efectos normales en la escala logit asumiendo que esa forma es razonable para la brecha; si la verdadera distribución fuera muy asimétrica o con colas gruesas, el sesgo medido cambiaría de magnitud pero no el sentido de la verificación, que es si el estimador puede producir la razón observada a partir de una verdad distinta.
+""")
+
+md("### 9.5 Figura: nula de (a) y componentes por variante")
+code(r"""
+na0 = nula_homogeneidad(sp0)
+fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+ax = axes[0]
+ax.hist(na0[:, 0], bins=40, color="0.7", edgecolor="white")
+ax.axvline(r0.var_unidad, color="crimson", lw=2)
+ax.axvline(np.percentile(na0[:, 0], 95), color="k", ls="--", lw=1)
+ax.set_xlim(min(na0[:, 0].min(), 0) * 1.1, max(r0.var_unidad, np.percentile(na0[:, 0], 95)) * 1.25)
+ax.set_xlabel("var entre AGEB dentro de la alcaldia (log de la brecha)")
+ax.set_title(f"(a) nula de homogeneidad, {B_REP:,} simulaciones\nobservada {r0.var_unidad:.3f} (rojo) vs p95 {np.percentile(na0[:, 0], 95):.3f} (--), p = {r0.p_perm_a:.3f}", fontsize=9)
+ax = axes[1]
+sub = h1[(h1.delito == "violencia_familiar") & (h1.variante != V_GRU)].copy()
+sub["eti"] = sub.variante.str.replace("sensibilidad: ", "").str.replace("principal: ", "pr: ").str[:26] + " / " + sub.ventana
+yy = np.arange(len(sub))
+ax.errorbar(sub.var_unidad, yy + .15, xerr=[sub.var_unidad - sub.var_unidad_ic95_inf, sub.var_unidad_ic95_sup - sub.var_unidad], fmt="o", ms=4, label="entre AGEB")
+ax.errorbar(sub.var_alcaldia, yy - .15, xerr=[sub.var_alcaldia - sub.var_alcaldia_ic95_inf, sub.var_alcaldia_ic95_sup - sub.var_alcaldia], fmt="s", ms=4, color="darkorange", label="entre alcaldias")
+ax.set_yticks(yy); ax.set_yticklabels(sub.eti, fontsize=7); ax.invert_yaxis()
+ax.set_xlabel("componente de varianza (log de la brecha), IC 95% bootstrap")
+ax.set_title("Violencia familiar: AGEB vs alcaldia", fontsize=9); ax.legend(fontsize=8)
+plt.tight_layout(); plt.show()
+""")
+
+md(r"""
+**Lectura (contraste con robo a conductor, a igual unidad):** el contraste del §3.3 pedía los 76 grupos de H3 como unidad. Al correrlo quedó claro que **76 grupos de 22 AGEB y 2,294 AGEB no son unidades comparables**, así que se agregó la violencia familiar a **los mismos 76 grupos** (fila `contraste a igual unidad`). Esta fila se añadió después de ver el tamaño de las unidades, **no entra en la regla de decisión de H1** (que se decide con las filas de AGEB) y solo sirve para leer el contraste.
+
+| unidad = los 76 grupos de H3 | σ²_alc | σ²_grupo | ICC alcaldía | razón (IC 95%) |
+|---|---|---|---|---|
+| Violencia familiar, 2019 | 0.001 | 0.044 | 0.024 | 41.3 (1.21 – ∞) |
+| Violencia familiar, 2021–22 | 0.017 | 0.038 | 0.307 | 2.25 (0.45 – 4.06) |
+| Robo a conductor, 2019 | 0.032 | 0.059 | **0.354** | 1.83 (0.25 – 2.58) |
+| Robo a conductor, 2021–22 | 0.050 | 0.048 | **0.512** | 0.95 (0.00 – 1.27) |
+
+- **En robo a conductor, (b) no se puede afirmar:** ninguno de los dos IC de la razón queda por encima de 1, y la alcaldía se lleva entre 35% y 51% de la varianza, contra 11% en violencia familiar a grano AGEB. (a) sí se cumple en las dos ventanas (p = 0.001 y 0.004): hay variación real entre grupos, pero no se puede decir que supere a la de entre alcaldías.
+- **Por qué el contraste es débil, como se declaró antes de verlo:** 76 unidades en 15 alcaldías (Milpa Alta queda fuera), **cuatro alcaldías con un solo grupo** que no aportan nada a σ²_grupo, y IC de la razón tan anchos que uno llega a infinito. No prueba nada sobre robo a conductor; sugiere que su fricción es más un asunto de alcaldía, lo cual es coherente con que el hecho ocurra en la vialidad y no en el domicilio (S5).
+- **El hallazgo accidental y útil:** al agregar violencia familiar a los grupos, σ²_grupo cae de **0.102 a 0.044 y 0.038**, es decir, se pierde casi el 60% de la variación sub-alcaldía. **La señal vive por debajo del grano de los grupos de H3.** Eso justifica que H1 se pruebe en AGEB y que el mapa del 2.6 sea de AGEB y no de grupos.
+""")
+
+md("### 9.6 Exportar `resultados/13_variacion_brecha_ageb_vs_alcaldia.csv`")
+code(r"""
+cols13 = ["delito", "variante", "ventana", "unidad", "n_unidades", "n_alcaldias", "n_llamadas", "n_carpetas",
+          "var_alcaldia", "var_alcaldia_ic95_inf", "var_alcaldia_ic95_sup",
+          "var_unidad", "var_unidad_ic95_inf", "var_unidad_ic95_sup",
+          "var_interaccion", "var_interaccion_ic95_inf", "var_interaccion_ic95_sup",
+          "icc_alcaldia", "icc_alcaldia_ic95_inf", "icc_alcaldia_ic95_sup",
+          "razon_unidad_alcaldia", "razon_ic95_inf", "razon_ic95_sup",
+          "estadistico_a", "p95_nula_a", "p_perm_a", "p_perm_a_interaccion",
+          "estadistico_b", "p95_nula_b", "p_perm_b",
+          "sobredispersion_pearson", "interpretable", "veredicto_a", "veredicto_b", "veredicto_h1"]
+o13 = h1[cols13].copy()
+o13[["n_llamadas", "n_carpetas"]] = o13[["n_llamadas", "n_carpetas"]].round().astype(int)
+num13 = o13.select_dtypes("number").columns
+o13[num13] = o13[num13].replace([np.inf, -np.inf], np.nan).round(4)
+assert len(o13) == 16 and not o13.duplicated(["delito", "variante", "ventana"]).any()
+o13.to_csv(OUT / "13_variacion_brecha_ageb_vs_alcaldia.csv", index=False)
+print(o13.shape); display(o13)
+sorted(p.name for p in OUT.glob("*.csv"))
+""")
+
+md(r"""
+### 9.7 Qué deja el 2.3
+
+**Veredicto, con la regla fijada el 8 de oct en `PLAN_15_OCT.md` §3.3 antes de calcular nada: H1 se acepta.** En violencia familiar la brecha llamadas/carpeta varía **4.8 veces más entre AGEB de la misma alcaldía que entre alcaldías** (IC 95%: 2.8–6.4) y esa variación no es ruido de conteo (p = 0.001 contra la nula de homogeneidad). La alcaldía se queda con el 11% de la varianza (ICC 0.110; IC 0.085–0.158). Se sostiene en las dos ventanas por separado, con solo los 698 AGEB de ≥ 12 carpetas y con el 19% de robo descontado; la única sensibilidad que no habla es la de llamadas afirmativas, por falta de eventos, y no contradice.
+
+**Qué significa y qué no.** Significa que el grano de alcaldía —el del encuadre original, descartado en septiembre por falta de precisión en ENVIPE— también es el grano **equivocado** para la fricción entre el aviso y la denuncia: aunque ENVIPE pudiera medirse por alcaldía, se perdería el 89% de la variación. No significa que la brecha mida subregistro (S6): mide fricción entre el aviso y la denuncia, y el nivel de ciudad lo acota la ENDIREH (2.4). Tampoco significa que cada AGEB sea una unidad independiente: parte de σ²_ageb puede ser un gradiente suave sub-alcaldía, y eso lo separa el I de Moran del 2.5.
+
+**Lo que el 2.6 necesita de aquí** (el mapa es la figura central del 15 de oct):
+- **Grano AGEB, no grupos.** Agregar a los 76 grupos de H3 borra el 60% de la variación sub-alcaldía.
+- **Pintar el promedio de las dos ventanas**, no una sola: σ²_int = 0.070 es del mismo orden que σ²_ageb = 0.102, así que una sola ventana mezcla lo estable con lo que no se repite.
+- **Qué AGEB colorear:** los 2,294 con ≥ 1 carpeta en cada ventana. Los 139 restantes en gris ("sin carpetas en una ventana"), los de `conteo_bajo` (1,570 y 1,425 en `11_`) hachurados y no coloreados, y los 601 con `cambia_clasif_s1` marcados.
+- **Escala divergente centrada en la brecha de la ciudad de cada ventana**, en **log**: ±1 desviación estándar entre AGEB es ×1.38 y ×0.73; ±2 es ×1.89 y ×0.53. Una escala lineal de la razón comprimiría la mitad baja.
+- **Pie de figura obligatorio:** la variación es sub-alcaldía (ICC 0.11), así que el mapa **no** se lee como un mapa de alcaldías; y la cobertura de coordenadas de Cuauhtémoc (87.7% en 2021–22) y Milpa Alta (88.9% en 2019) puede inflar su brecha hasta 14%.
+""")
+
+md(r"""
+## 10. Experimento 2.6 — El mapa de la brecha por AGEB (`resultados/figuras/`)
+
+Esta sección **no calcula nada nuevo**: lee `vf`, `rc` y `G` de la sección 8 (= `resultados/11_`) y los componentes de varianza `h1` de la sección 9 (= `resultados/13_`). Produce las tres figuras del deck y no exporta ningún CSV.
+
+### 10.0 Qué tiene que poder concluir un sinodal en 10 segundos
+
+**Una frase:** *la fricción entre el aviso y la denuncia cambia de un AGEB al de al lado, y ese cambio no respeta las fronteras de alcaldía.*
+
+Si la figura no se puede describir así, está mal diseñada. Todo lo demás —el nivel de la brecha, el calibrador de ciudad, las covariables— es otra slide.
+
+**Qué decisión sostiene (§5, slide 7, "Resultado 2: el grano AGEB funciona").** La slide 7 afirma que bajar a AGEB no es un capricho de resolución sino el único grano en el que el fenómeno es visible: el join por colonia coincide 38%, la unión espacial por coordenadas asigna 93.5% y 99.8%, y **lo que se gana con ese grano es el 89% de la varianza** que el grano de alcaldía borra (2.3). El mapa es la evidencia visual de esa última afirmación, y el mapa de robo a conductor al lado es el control: cuando los conteos obligan a agregar a 76 grupos, el patrón fino desaparece y lo que queda se parece a un mapa de alcaldías (ICC 0.354 y 0.512, contra 0.110).
+
+**Qué no dice el mapa.** No dice cuánto subregistro hay en cada AGEB. La brecha acota la **fricción entre el aviso y la denuncia** (S6): los hechos que no llegan ni al 911 ni a la FGJ son invisibles para ella. El mapa **ordena territorios**; el nivel de ciudad lo acota la ENDIREH (2.4).
+
+### 10.1 Qué se pinta y por qué, en el formato de supuestos del caso
+
+| Decisión | Supuesto en el formato del caso |
+|---|---|
+| **Cantidad: la media de los dos log de la brecha centrados por ventana** (exactamente la que el 2.3 descompuso: `m = mean_w[ log((llamadas+0.5)/(carpetas+0.5)) − media de la ventana ]`) | *Uso el promedio de las dos ventanas asumiendo que lo que interesa es la parte de la brecha que se repite, y que centrar cada ventana por su propio nivel la hace comparable pese a la caída 1.00 → 0.82.* Es obligado por el 2.3: σ²_AGEB×ventana = 0.070 es del orden de σ²_AGEB = 0.102, así que pintar una sola ventana mezclaría lo estable con lo que no se repite. Si la brecha hubiera cambiado de **orden** entre ventanas, el promedio sería engañoso y habría que mapear cada ventana por separado; no es el caso (ρ = 0.30, p = 0.001, 8.5), y la figura de respaldo 10.3 muestra las dos. **No uso la razón de los conteos sumados** porque no es la cantidad que el 2.3 descompuso: sumar conteos pondera por volumen y le daría al mapa una escala cuya varianza no es la que el ICC reparte. |
+| **Centro de la escala = el AGEB promedio de cada ventana**, no la razón de la ciudad | *Uso el promedio no ponderado de los AGEB como centro asumiendo que la pregunta es cómo se reparte la fricción entre **territorios**, que es el mismo peso igual por AGEB que fija el §3.3.* La brecha de la ciudad está ponderada por volumen y queda ×1.13 por encima de ese centro; va marcada con línea punteada en la barra de color para que las dos referencias sean visibles. Si lo que importara fuera dónde está el volumen de casos, el centro correcto sería la razón de la ciudad y el mapa se vería 0.12 en log más azul. |
+| **Escala divergente en log, límites ±2σ entre AGEB (×1.89 / ×0.53)** | *Uso σ_AGEB del modelo de varianza —no los cuantiles observados— asumiendo que la escala debe medir variación **real** y no ruido de conteo.* el 57% de la dispersión visible de `m` es ruido binomial (Var(m) = 0.361, de la cual la varianza binomial esperada aporta 0.206 y σ²_AGEB solo 0.102, el 28%), así que fijar los extremos en los percentiles observados haría que el color midiera sobre todo cuántas carpetas tiene el AGEB. Una escala lineal de la razón comprimiría además toda la mitad baja (×0.53 a ×1.00 ocuparía un tercio del rango que ×1.00 a ×1.89). Si la varianza estuviera mal estimada, la lectura relativa del mapa (quién es más alto que quién) no cambia: solo cambia cuántos AGEB saturan. |
+| **Hachurar los AGEB de conteo bajo y colorearlos igual** | *Los coloreo asumiendo que el mapa debe mostrar la ciudad completa y que el hachurado comunica "este valor lleva ruido" sin romper el patrón.* Son 1,596 de los 2,294 del universo: dejarlos en blanco vaciaría el 70% del mapa y el ojo leería "aquí no pasa nada" en vez de "aquí hay pocos casos". Si se prefiere la lectura estricta —no colorear lo que no se puede medir— está la figura de respaldo 10.4, con solo los 698 AGEB de ≥ 12 carpetas en cada ventana; el patrón fino sigue ahí. |
+| **Marcar los AGEB sensibles a S1 solo donde no hay hachura** | *Marco con un círculo los 154 AGEB cuya clasificación cambia en la banda 0–19% de robo **y** que no están ya hachurados, asumiendo que un AGEB ya marcado por ruido no necesita una segunda advertencia.* Los otros 442 de los 596 sensibles a S1 dentro del universo caen en conteo bajo y ya van hachurados, así que los 596 llevan alguna marca. |
+| **Grano AGEB, no los 76 grupos de H3** | *Uso el AGEB como unidad asumiendo que la señal vive por debajo del grupo.* El 2.3 lo verificó: al agregar violencia familiar a esos mismos 76 grupos, σ²_grupo cae de 0.102 a 0.044 y 0.038, o sea se borra ~60% de la variación sub-alcaldía. Si la señal hubiera sobrevivido a la agregación, el mapa de grupos sería preferible por ser menos ruidoso. |
+| **Robo a conductor a grano de grupo, con Milpa Alta en gris** | *Lo mapeo a 76 grupos asumiendo que sus conteos no permiten el AGEB* (en 2021–22 los 2,433 AGEB tienen conteo bajo y solo 13 se distinguen de la ciudad, 8.2). Milpa Alta es el único grupo que no llega a 12 carpetas ni juntando toda la alcaldía, así que no tiene valor y va en gris; los 2 AGEB sin polígono quedan fuera de toda operación geométrica. **Aquí no se correlacionan ventanas:** eso es H3 y va en el 2.4. |
+
+**Paleta.** Divergente azul ↔ rojo con punto medio gris neutro (separación CVD ΔE 16.1 en el peor par adyacente, deuteranopía). Rojo = más llamadas por carpeta; azul = más carpetas que llamadas. Nunca un arcoíris, nunca un tono en el punto medio.
+""")
+
+code(r"""
+import matplotlib as mpl
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+
+FIG = OUT / "figuras"; FIG.mkdir(exist_ok=True)
+
+# --- la cantidad del 2.3, leída de vf (= 11_), sin recalcular la brecha ---
+W = vf[["llamadas", "carpetas", "brecha_ciudad"]].unstack("ventana")
+LLv = W["llamadas"][VENT].to_numpy(float); CARv = W["carpetas"][VENT].to_numpy(float)
+Yv = np.log((LLv + 0.5) / (CARv + 0.5))
+UNIV = (CARv >= 1).all(1)                       # universo del 2.3: >= 1 carpeta en cada ventana
+CEN = Yv[UNIV].mean(axis=0, keepdims=True)      # mismo centrado por ventana que componentes()
+Zv = Yv - CEN
+MAPA_V = pd.DataFrame(np.where(UNIV[:, None], Zv, np.nan), index=W.index, columns=VENT)
+MAPA_V["prom"] = np.where(UNIV, Zv.mean(axis=1), np.nan)
+REF_CIUDAD = float((np.log(W["brecha_ciudad"][VENT].iloc[0].to_numpy(float)) - CEN[0]).mean())
+
+BAJO = vf.conteo_bajo.unstack("ventana")[VENT].any(axis=1).reindex(W.index)
+SENS1 = vf.cambia_clasif_s1.unstack("ventana")[VENT].any(axis=1).reindex(W.index)
+U = pd.Series(UNIV, index=W.index); ALTO = pd.Series((CARv >= UMBRAL).all(1), index=W.index)
+
+# --- escala: sigma entre AGEB del modelo de varianza (h1, = 13_) ---
+PRIN = h1[(h1.delito == "violencia_familiar") & (h1.variante == V_PRIN)].set_index("ventana")
+SD_AGEB = float(np.sqrt(PRIN.loc["ambas", "var_unidad"])); LIM = 2 * SD_AGEB
+ICC = PRIN.icc_alcaldia.to_dict()
+ICC_IC = (PRIN.loc["ambas", "icc_alcaldia_ic95_inf"], PRIN.loc["ambas", "icc_alcaldia_ic95_sup"])
+
+# --- grupos de H3 para el mapa de contraste (mismo recetario, unidad = grupo) ---
+GL = G.llamadas.unstack("ventana")[VENT]; GC = G.carpetas.unstack("ventana")[VENT]
+GOK = G.cumple_umbral.unstack("ventana")[VENT[0]].reindex(GL.index).astype(bool).to_numpy()
+Yg = np.log((GL.to_numpy(float) + 0.5) / (GC.to_numpy(float) + 0.5))
+MAPA_G = pd.Series(np.where(GOK, (Yg - Yg[GOK].mean(axis=0, keepdims=True)).mean(axis=1), np.nan), index=GL.index)
+
+# --- verificación: lo pintado cuadra con los conteos de 11_ ---
+assert int(UNIV.sum()) == 2294 and int((~UNIV).sum()) == 139
+assert int((U & BAJO).sum()) + int((U & ALTO).sum()) == int(UNIV.sum())
+assert int(GOK.sum()) == 76 and len(GOK) == 77
+assert np.isclose(CARv[UNIV].sum() / CARv.sum(), 0.995, atol=5e-4)
+VAR_M = float(np.nanvar(MAPA_V.prom[U]))
+# ruido de conteo esperado en m: Var(m) = sigma2_AGEB + sigma2_int/2 + vbar/2, con vbar la varianza binomial conocida
+VBAR = float((1.0 / (LLv + 0.5) + 1.0 / (CARv + 0.5))[UNIV].mean())
+RUIDO = (VBAR / 2) / VAR_M
+print(f"universo coloreado {int(UNIV.sum()):,} | gris {int((~UNIV).sum())} | hachurados {int((U & BAJO).sum()):,} "
+      f"| marcados S1 (no hachurados) {int((U & SENS1 & ~BAJO).sum())} | S1 ya hachurados {int((U & SENS1 & BAJO).sum())}")
+print(f"sigma_AGEB = {SD_AGEB:.3f} -> +-1 = x{np.exp(SD_AGEB):.2f}/x{np.exp(-SD_AGEB):.2f}, "
+      f"+-2 = x{np.exp(LIM):.2f}/x{np.exp(-LIM):.2f} | centro de la ciudad en la escala: x{np.exp(REF_CIUDAD):.2f}")
+print(f"Var(m) observada {VAR_M:.3f} = sigma2_AGEB {PRIN.loc['ambas','var_unidad']:.3f} + ruido y AGEBxventana "
+      f"| sigma2_AGEB es el {PRIN.loc['ambas','var_unidad'] / VAR_M:.0%} y el ruido de conteo el {RUIDO:.0%}")
+print(f"AGEB saturados (|m| > 2 sigma): {int((MAPA_V.prom[U].abs() > LIM).sum()):,} de {int(UNIV.sum()):,} "
+      f"| entre los de conteo alto: {int((MAPA_V.prom[U & ALTO].abs() > LIM).sum())} de {int((U & ALTO).sum())}")
+""")
+
+code(r"""
+# --- geometría: EPSG:6372 para mapear; los 2 AGEB sin polígono quedan fuera ---
+GEO = ageb.dropna(subset=["geometry"]).to_crs(6372).set_index("ageb")
+GEO["alcaldia"] = ageb.set_index("ageb").alcaldia.reindex(GEO.index)
+ALC_POLY = GEO.dissolve("alcaldia")
+XL, YL = GEO.total_bounds[[0, 2]], GEO.total_bounds[[1, 3]]
+GPOLY = GEO.assign(grupo_h3=rc.xs(VENT[0]).grupo_h3.reindex(GEO.index)).dropna(subset=["grupo_h3"]).dissolve("grupo_h3")
+print(f"AGEB con polígono: {len(GEO):,} de {len(ageb):,} | grupos con polígono: {len(GPOLY)} "
+      f"| AGEB en el grupo que no llega al umbral, dibujados en gris: {int(rc.xs(VENT[0]).grupo_h3.isin(GL.index[~GOK]).reindex(GEO.index).fillna(False).sum())} | sin polígono, fuera del mapa: {int(ageb.geometry.isna().sum())}")
+
+CMAP = LinearSegmentedColormap.from_list("brecha", ["#0d366b", "#256abf", "#86b6ef", "#cde2fb", "#f0efec",
+                                                    "#fbd6d3", "#f0a39f", "#e34948", "#8f2322"])
+GRIS, TINTA, TINTA2 = "#d9d7d2", "#1a1a19", "#56544f"
+NORM = Normalize(-LIM, LIM)
+ESTILO = {"font.size": 13, "hatch.linewidth": 0.45, "figure.facecolor": "white", "savefig.facecolor": "white"}
+DPI = 200   # 16x9 pulgadas a 200 dpi = 3200x1800 px: proyector y slide a pantalla completa
+
+def dibuja_mapa(ax, poly, val, bajo=None, s1=None, lw_alc=1.8):
+    v = val.reindex(poly.index)
+    poly[v.isna()].plot(ax=ax, color=GRIS, ec="none")
+    poly[v.notna()].assign(_v=v[v.notna()].clip(-LIM, LIM)).plot(ax=ax, column="_v", cmap=CMAP, norm=NORM, ec="none")
+    if bajo is not None:
+        ix = poly.index.intersection(bajo[bajo.fillna(False)].index)
+        if len(ix):
+            poly.loc[ix].plot(ax=ax, fc="none", ec="white", lw=0, hatch="//", alpha=.75, zorder=3)
+    if s1 is not None:
+        ix = poly.index.intersection(s1[s1.fillna(False)].index)
+        if len(ix):
+            c = poly.loc[ix].representative_point()
+            ax.scatter(c.x, c.y, s=9, fc="white", ec=TINTA, lw=.55, zorder=5)
+    ALC_POLY.boundary.plot(ax=ax, ec="white", lw=lw_alc, zorder=4)   # frontera de alcaldía, encima del color
+    ALC_POLY.boundary.plot(ax=ax, ec=TINTA, lw=.5, zorder=4)
+    ax.set_xlim(*XL); ax.set_ylim(*YL); ax.set_axis_off()
+
+def barra_color(fig, rect, vertical=True):
+    cax = fig.add_axes(rect)
+    cb = fig.colorbar(mpl.cm.ScalarMappable(norm=NORM, cmap=CMAP), cax=cax,
+                      orientation="vertical" if vertical else "horizontal", extend="both")
+    t = [-LIM, -SD_AGEB, 0, SD_AGEB, LIM]
+    cb.set_ticks(t); cb.set_ticklabels([f"×{np.exp(x):.2f}" for x in t], fontsize=13)
+    (cb.ax.axhline if vertical else cb.ax.axvline)(REF_CIUDAD, color=TINTA, lw=1.8, ls=(0, (2.5, 1.8)))
+    return cb
+
+def titulo_panel(ax, t, sub):
+    ax.set_title(t, fontsize=16.5, color=TINTA, pad=26)
+    ax.text(.5, 1.006, sub, transform=ax.transAxes, ha="center", va="bottom", fontsize=12.5, color=TINTA2)
+print("utilerías de figura listas")
+""")
+
+md(r"""
+### 10.2 Figura principal: violencia familiar por AGEB, con robo a conductor al lado como control del grano
+""")
+code(r"""
+with mpl.rc_context(ESTILO):
+    fig = plt.figure(figsize=(16, 9))
+    ax1 = fig.add_axes([.175, .185, .395, .635]); ax2 = fig.add_axes([.585, .185, .395, .635])
+    dibuja_mapa(ax1, GEO, MAPA_V.prom, bajo=BAJO & U, s1=SENS1 & U & ~BAJO)
+    dibuja_mapa(ax2, GPOLY, MAPA_G)
+    titulo_panel(ax1, f"Violencia familiar · {int(UNIV.sum()):,} AGEB", "cada polígono es un AGEB")
+    titulo_panel(ax2, f"Robo a conductor · {int(GOK.sum())} grupos de AGEB", "el grano más fino que permiten sus conteos")
+    fig.suptitle("La fricción entre el aviso y la denuncia cambia entre AGEB vecinos, no entre alcaldías",
+                 fontsize=23, fontweight="bold", x=.012, ha="left", y=.975, color=TINTA)
+    fig.text(.012, .918, "Brecha relativa de llamadas al 911 por carpeta de la FGJ · promedio de 2019 y jul-2021→abr-2022 · escala logarítmica",
+             fontsize=14.5, color=TINTA2, ha="left")
+    fig.text(.012, .80, "Color: brecha del territorio ÷ brecha\ndel AGEB promedio de su ventana",
+             fontsize=12.5, color=TINTA, va="top", linespacing=1.45)
+    barra_color(fig, [.030, .40, .019, .29])
+    fig.text(.055, .705, "más llamadas por carpeta", fontsize=11.5, color=TINTA2, va="bottom")
+    fig.text(.055, .385, "más carpetas que llamadas", fontsize=11.5, color=TINTA2, va="top")
+    fig.text(.012, .335, f"– –  brecha de la ciudad, ponderada\n      por volumen (×{np.exp(REF_CIUDAD):.2f} del centro)",
+             fontsize=11.5, color=TINTA, va="top", linespacing=1.45)
+    leg = [Patch(fc=GRIS, ec="none", label=f"sin carpetas en una de las\ndos ventanas · {int((~UNIV).sum())} AGEB"),
+           Patch(fc="#9ec5f4", ec="white", hatch="//", label=f"< {UMBRAL} carpetas en una ventana:\nel valor lleva ruido · {int((U & BAJO).sum()):,}"),
+           Line2D([], [], marker="o", ls="", mfc="white", mec=TINTA, ms=7,
+                  label=f"clasificación sensible al supuesto\nS1 · {int((U & SENS1 & ~BAJO).sum())} de los no hachurados")]
+    fig.legend(handles=leg, loc="upper left", bbox_to_anchor=(.008, .285), fontsize=11.5, frameon=False,
+               handlelength=1.5, labelspacing=1.0, handletextpad=.7)
+    pie = [f"Límites.  (1) La variación es sub-alcaldía: la alcaldía explica el 11% de la varianza "
+           f"(ICC {ICC['ambas']:.3f}; IC 95% {ICC_IC[0]:.3f}–{ICC_IC[1]:.3f}; {int(UNIV.sum()):,} AGEB). No es un mapa de alcaldías.",
+           f"(2) El {RUIDO:.0%} de la dispersión visible es ruido de conteo: "
+           f"por eso los AGEB con < {UMBRAL} carpetas van hachurados y la escala la fija σ entre AGEB (±1σ = ×{np.exp(SD_AGEB):.2f} / ×{np.exp(-SD_AGEB):.2f}), no los extremos observados.",
+           "(3) Cobertura de coordenadas desigual (S7): en Cuauhtémoc (87.7% en 2021–22) y Milpa Alta (88.9% en 2019) la brecha puede estar inflada hasta en 14%."]
+    for i, t in enumerate(pie):
+        fig.text(.012, .098 - i * .028, t, fontsize=11.5, color=TINTA2, va="top")
+    fig.text(.012, .006, "Fuentes: C5 llamadas 911 y carpetas FGJ-CDMX en la ventana común; marco AGEB Censo 2020 "
+             "(2,433 AGEB; 2 sin polígono). La brecha acota la fricción aviso→denuncia (S6); no mide el subregistro.",
+             fontsize=10.5, color=TINTA2, va="bottom")
+    fig.savefig(FIG / "2.6_mapa_brecha_violencia_familiar_ageb.png", dpi=DPI)
+    plt.show()
+""")
+md(r"""
+**Interpretación (figura principal):** en violencia familiar, AGEB contiguos de la misma alcaldía aparecen en rojo intenso y azul intenso uno junto al otro, y las fronteras de alcaldía (en blanco) no separan bloques de color; en robo a conductor, donde los conteos obligan a agregar a 76 grupos, el color se vuelve liso y los bloques se parecen a las alcaldías. **El mismo método aplicado a dos delitos produce un mapa fino y uno grueso, y la diferencia es el grano que permiten los conteos, no el fenómeno.**
+""")
+
+md(r"""
+### 10.3 Respaldo: las dos ventanas por separado
+
+Responde a "¿y si el patrón es de una sola ventana?". Al pie va el ICC de alcaldía de cada ventana, que **no es parejo**: 0.057 en 2019 y 0.241 en 2021–22 (riesgo registrado el 8 de oct en `PLAN_15_OCT.md` §7). El orden de los AGEB se repite (ρ = 0.30, p = 0.001), el peso relativo de la alcaldía no.
+""")
+code(r"""
+with mpl.rc_context(ESTILO):
+    fig2 = plt.figure(figsize=(16, 9))
+    axs = [fig2.add_axes([.165, .185, .40, .635]), fig2.add_axes([.585, .185, .40, .635])]
+    for ax, w in zip(axs, VENT):
+        bajo_w = (vf.xs(w).conteo_bajo & U).reindex(GEO.index)   # solo dentro del universo coloreado
+        dibuja_mapa(ax, GEO, MAPA_V[w], bajo=bajo_w)
+        n_col = int(MAPA_V[w].reindex(GEO.index).notna().sum())
+        titulo_panel(ax, f"{w.replace('-', '–')} · ICC de alcaldía {ICC[w]:.3f}",
+                     f"{n_col:,} AGEB coloreados · {int(bajo_w.fillna(False).sum()):,} de ellos con < {UMBRAL} carpetas")
+    fig2.suptitle("El orden entre AGEB se repite en las dos ventanas; el peso de la alcaldía no",
+                  fontsize=22, fontweight="bold", x=.012, ha="left", y=.975, color=TINTA)
+    fig2.text(.012, .918, "Misma cantidad que la figura principal, cada ventana centrada en su propio nivel "
+              "(la brecha de la ciudad cae de 1.00 a 0.82 entre ventanas)", fontsize=14, color=TINTA2)
+    barra_color(fig2, [.030, .40, .019, .29])
+    fig2.text(.012, .80, "Color: brecha del territorio ÷ brecha\ndel AGEB promedio de esa ventana",
+              fontsize=12.5, color=TINTA, va="top", linespacing=1.45)
+    fig2.text(.055, .705, "más llamadas por carpeta", fontsize=11.5, color=TINTA2, va="bottom")
+    fig2.text(.055, .385, "más carpetas que llamadas", fontsize=11.5, color=TINTA2, va="top")
+    fig2.legend(handles=[Patch(fc=GRIS, ec="none", label=f"sin carpetas en una de las\ndos ventanas · {int((~UNIV).sum())} AGEB"),
+                         Patch(fc="#9ec5f4", ec="white", hatch="//", label=f"< {UMBRAL} carpetas en esa ventana:\nel valor lleva ruido")],
+                loc="upper left", bbox_to_anchor=(.008, .33), fontsize=11.5, frameon=False, handlelength=1.5, labelspacing=1.0)
+    pie2 = ["Estabilidad del orden: Spearman entre ventanas ρ = 0.30 (IC 95% 0.23–0.37; 698 AGEB con ≥ 12 carpetas en cada ventana), "
+            "percentil 95 de la nula 0.065, p de permutación 0.001 (1,000 permutaciones, semilla 2026).",
+            f"Peso de la alcaldía: ICC {ICC['2019']:.3f} en 2019 y {ICC['2021-22']:.3f} en 2021–22, sobre {int(UNIV.sum()):,} AGEB en cada ventana. "
+            "El cambio de nivel de la brecha entre ventanas no fue parejo entre alcaldías: matiza S4 (se repite el orden, no el nivel).",
+            "Las dos ventanas no son del mismo largo (12 y 10 meses) ni comparten contexto: 2021–22 cae tras el confinamiento, con 1.34× más carpetas y 1.09× más llamadas."]
+    for i, t in enumerate(pie2):
+        fig2.text(.012, .098 - i * .028, t, fontsize=11.5, color=TINTA2, va="top")
+    fig2.savefig(FIG / "2.6_mapa_brecha_por_ventana.png", dpi=DPI)
+    plt.show()
+""")
+md(r"""
+**Interpretación (dos ventanas):** el patrón fino está en las dos, así que no lo produce una ventana sola; lo que sí cambia entre ellas es cuánto de la variación se alinea con las alcaldías (ICC 0.057 → 0.241). *Supuesto:* mapeo las dos ventanas con la misma escala y el mismo centrado por ventana asumiendo que lo comparable entre ellas es la **posición relativa** del AGEB, no su nivel; si se quisieran comparar niveles, habría que usar una escala absoluta y entonces 2021–22 se vería entera más azul.
+""")
+
+md(r"""
+### 10.4 Respaldo: solo los AGEB donde la brecha se mide con precisión
+
+Responde a "¿y si todo esto es ruido de conteo?". Son los 698 AGEB con ≥ 12 carpetas en **cada** ventana (CV de Poisson del denominador ≤ 28.9%), el mismo universo de la prueba de estabilidad de 8.5 y de la sensibilidad de H1 que da razón 5.01 (IC 2.10–7.32).
+""")
+code(r"""
+with mpl.rc_context(ESTILO):
+    fig3 = plt.figure(figsize=(13, 9))
+    ax = fig3.add_axes([.19, .15, .78, .70])
+    dibuja_mapa(ax, GEO, MAPA_V.prom.where(ALTO))
+    fig3.suptitle("Con solo los AGEB de conteo alto, el patrón fino no desaparece",
+                  fontsize=20, fontweight="bold", x=.018, ha="left", y=.975, color=TINTA)
+    fig3.text(.018, .912, f"Violencia familiar · {int((U & ALTO).sum())} AGEB con ≥ {UMBRAL} carpetas en cada ventana · "
+              f"el resto de la ciudad en gris", fontsize=13.5, color=TINTA2)
+    barra_color(fig3, [.045, .33, .022, .30])
+    fig3.text(.018, .80, "Color: brecha ÷ brecha del\nAGEB promedio de su ventana", fontsize=12, color=TINTA, va="top", linespacing=1.45)
+    fig3.text(.082, .645, "más llamadas\npor carpeta", fontsize=11, color=TINTA2, va="bottom", linespacing=1.3)
+    fig3.text(.082, .315, "más carpetas\nque llamadas", fontsize=11, color=TINTA2, va="top", linespacing=1.3)
+    pie3 = ["En este subconjunto la razón σ²_AGEB/σ²_alcaldía sigue siendo 5.01 (IC 95% 2.10–7.32) y el ICC de alcaldía 0.099,",
+            f"contra 4.82 (2.81–6.44) e ICC {ICC['ambas']:.3f} en los {int(UNIV.sum()):,} AGEB: el predominio del grano AGEB no lo producen los AGEB con pocos casos.",
+            f"Aquí saturan la escala {int((MAPA_V.prom[U & ALTO].abs() > LIM).sum())} de {int((U & ALTO).sum())} AGEB "
+            f"({(MAPA_V.prom[U & ALTO].abs() > LIM).mean():.0%}), contra {(MAPA_V.prom[U].abs() > LIM).mean():.0%} en el mapa completo, "
+            "que es lo que predice quitar ruido de conteo."]
+    for i, t in enumerate(pie3):
+        fig3.text(.018, .095 - i * .029, t, fontsize=11.5, color=TINTA2, va="top")
+    fig3.savefig(FIG / "2.6_mapa_brecha_conteo_alto.png", dpi=DPI)
+    plt.show()
+print(sorted(p.name for p in FIG.glob("*.png")))
+""")
+md(r"""
+**Interpretación (conteo alto):** con un cuarto de los AGEB pero más de la mitad de las carpetas, el mosaico sigue cruzando las fronteras de alcaldía y la proporción de AGEB que saturan la escala cae a la mitad, que es justo lo que predice quitar ruido de conteo. *Supuesto:* leo este mapa como el mismo fenómeno visto con menos ruido, asumiendo que los AGEB con ≥ 12 carpetas no son un subconjunto con otra fricción; si lo fueran (por ejemplo, si solo los AGEB densos tuvieran brecha alta), este mapa y el completo no se parecerían, y se parecen.
+
+### 10.5 Qué deja el 2.6
+
+- Tres PNG en `resultados/figuras/`, con nombres estables: `2.6_mapa_brecha_violencia_familiar_ageb.png` (slide 7), `2.6_mapa_brecha_por_ventana.png` y `2.6_mapa_brecha_conteo_alto.png` (respaldo). Se regeneran corriendo esta sección; no dependen de ningún CSV intermedio nuevo.
+- **La figura dice una frase:** la fricción entre el aviso y la denuncia cambia entre AGEB vecinos y no respeta las fronteras de alcaldía. El mapa de robo a conductor al lado muestra que, cuando los conteos obligan a agregar, esa misma señal se vuelve un mapa de alcaldías.
+- **Lo que no dice:** cuánto subregistro hay. Ordena territorios (S6). El nivel de ciudad lo acota la ENDIREH en el 2.4.
+- **Queda para el 2.5** la pregunta que el mapa plantea y no responde: si el mosaico es ruido espacial o un gradiente suave sub-alcaldía. El I de Moran lo separa, y a ojo el mapa tiene las dos cosas.
 """)
 
 nb = nbf.v4.new_notebook()
