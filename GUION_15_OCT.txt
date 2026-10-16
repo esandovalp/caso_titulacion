@@ -1,0 +1,99 @@
+[Revisión de avance, 15 de octubre de 2026. Lo que está entre corchetes no se lee.]
+
+[slide 1: el gancho]
+
+Buenos días. Antes de la pregunta, una afirmación.
+
+La Ciudad de México no mide mal el delito por falta de datos. Lo mide mal porque solo cuenta lo que alguien logró denunciar. [pausa]
+
+La carpeta de investigación registra bien dónde ocurrió el hecho. Lo que depende de la denuncia no es el lugar: es que el registro exista.
+
+Mi pregunta es dónde se pierde esa denuncia, y a qué grano se puede ver. [slide 2: por qué importa]
+
+Esto no es un problema abstracto. Quien reparte prevención y atención entre territorios, las alcaldías, la policía de la ciudad, la Secretaría de las Mujeres, decide con el conteo de carpetas.
+
+Miren las dos puntas de la ciudad. En Benito Juárez, 17 por ciento de la gente se siente insegura, y es la alcaldía con la segunda tasa de carpetas más alta. En Iztapalapa, 72 por ciento, y tiene la tasa más baja. [pausa]
+
+No es una curiosidad: es el patrón. Donde más se denuncia es donde menos se oculta. La correlación entre la tasa de carpetas y la cifra negra de la encuesta es de menos 0.61.
+
+Dicho de otro modo: quien asigna recursos con la cifra de carpetas los asigna al revés. [slide 3: la alcaldía no alcanza]
+
+En septiembre les propuse medir exactamente eso, por alcaldía. Lo intenté, no se puede, y lo descarta mi propia evidencia.
+
+Al desagregar la encuesta por alcaldía, 12 de las 16 quedan con precisión baja, según los propios criterios del INEGI. Y las diferencias entre alcaldías, una vez que corrijo por el diseño muestral, dan un valor p de 0.84.
+
+Es decir: no hay evidencia de que sean distintas. Lo que hay es una muestra insuficiente. [pausa]
+
+Para que le crean al resto, el control de calidad. El mismo código reproduce la cifra negra oficial de la ciudad: a mí me da 93.5 por ciento, el INEGI publica 93.2.
+
+Esto no es un retroceso. Es el primer resultado, y es el que obliga a bajar de grano. [slide 4: la idea]
+
+La idea del trabajo es esta. Entre que ocurre un hecho y que se abre una carpeta hay un paso intermedio que sí queda registrado: alguien llama al 911.
+
+Llamar no cuesta nada. Denunciar cuesta tiempo, traslado y confianza. De hecho, el 71 por ciento de las razones de no denuncia que recoge la encuesta son atribuibles a la autoridad: pérdida de tiempo, desconfianza, trámites. [pausa]
+
+Entonces, cuántas llamadas hay por cada carpeta es una medida de la fricción entre el aviso y la denuncia. No dice cuánto subregistro hay: ordena territorios. El nivel de la ciudad lo acoto aparte, con una encuesta. [pausa]
+
+Trabajo con dos delitos. Violencia familiar es la aplicación, porque el hecho ocurre en la vivienda y eso me da un denominador legítimo. Robo a conductor es la calibración del método, porque es el único par entre 911 y fiscalía con un mapeo de confianza alta.
+
+Las tres hipótesis quedaron por escrito antes de modelar, y la regla de decisión de cada una, antes de calcular. [slide 5: los datos]
+
+Las fuentes, y lo que cada una no puede.
+
+Las carpetas de la fiscalía son 2.1 millones de registros con coordenadas. Su trampa: el 86 por ciento cae en una categoría comodín, delito de bajo impacto, así que ese campo es inservible para acotar el alcance. Y la cobertura de coordenadas depende del delito.
+
+Las llamadas al 911 son 576 mil en la ventana que puedo usar. Su límite es duro: el C5 no publica nada después de abril de 2022.
+
+Las encuestas dan el cuánto, nunca el dónde: no bajan del nivel de entidad. Y el Censo me da las unidades del mapa, con las viviendas y las características del hogar. [pausa]
+
+Todo se une por coordenadas, no por nombre de colonia. Entre el 911 y la fiscalía, los nombres de colonia solo coinciden en 38 por ciento. [slide 6: el mapa]
+
+Este es el mapa. Cada polígono es un AGEB: unas 2,400 unidades, contra 16 alcaldías. [pausa]
+
+La frase es esta. La fricción entre el aviso y la denuncia cambia por zonas más chicas que la alcaldía, y no respeta sus fronteras. [pausa] [señalar el recuadro del mapa grande, luego la imagen de la derecha]
+
+A la derecha está ese recuadro de cerca: seis kilómetros de lado. Ahí se ve lo que el mapa completo apenas insinúa. AGEB pegados, uno rojo y el de al lado azul.
+
+Y la frontera entre Iztacalco, Iztapalapa y Venustiano Carranza pasa por en medio, sin separar bloques de color.
+
+Esa ventana no la escogí a ojo: la elige una regla fija, la de seis kilómetros con más AGEB bien medidos, entre las que tocan al menos dos alcaldías. [pausa]
+
+La cifra que lo sostiene: hay 4.8 veces más variación entre AGEB de una misma alcaldía que entre alcaldías. [pausa]
+
+Y tres límites, que digo yo antes de que me los pregunten.
+
+Uno. No es un mapa de alcaldías: la alcaldía explica el 11 por ciento de la variación.
+
+Dos. El 57 por ciento de la dispersión que se ve es ruido de conteo. Por eso el rayado marca los AGEB con menos de 12 carpetas, y por eso la escala la fija el modelo y no los extremos observados.
+
+Tres. En Cuauhtémoc y en Milpa Alta la cobertura de coordenadas es peor, y eso puede inflar su brecha hasta en 14 por ciento. [slide 7: tres preguntas]
+
+Un mapa bonito no prueba nada. Le hice tres preguntas al dato. [pausa]
+
+Primera. ¿No bastaba la alcaldía? No. El 89 por ciento de la variación ocurre por debajo de ella. La razón de varianzas es 4.82, con intervalo de 2.81 a 6.44: entero por encima de uno. [pausa]
+
+Segunda. ¿No será todo ruido? No. El orden del territorio se repite entre 2019 y 2021.
+
+En robo a conductor, una correlación de rangos de 0.46. En violencia familiar, de 0.30. Las dos contra una nula por permutación, con p de 0.001.
+
+Esto no prueba que la brecha mida subregistro. Prueba que no es ruido. [pausa]
+
+Tercera. ¿Y cuánto subregistro hay? No se puede saber. Y ese es precisamente el problema, no un límite de mi trabajo.
+
+Lo que sí puedo hacer es acotarlo. En la encuesta de dinámica de las relaciones en los hogares, el 96.5 por ciento de las mujeres de la Ciudad de México con violencia familiar o de pareja no llegó a ninguna autoridad. El intervalo va de 95.1 a 97.8. [pausa]
+
+La brecha ordena territorios. La encuesta acota el nivel. Ninguna de las dos, sola, responde la pregunta. [slide 8: límites y qué sigue]
+
+Cierro con lo que todavía no puedo afirmar. Tres supuestos mueven el mapa, no solo el número.
+
+El canal: hasta el 19 por ciento de las llamadas que uso como violencia familiar podría ser robo. Cuando descuento ese 19 por ciento, el 14 por ciento de los AGEB cambia de clase, y ninguno se invierte.
+
+La estabilidad: era un supuesto declarado, y hoy está verificado en los dos delitos.
+
+Y el tercero, el más importante: la brecha acota la fricción entre el aviso y la denuncia. No mide el subregistro. [pausa]
+
+Lo que sigue son las covariables del Censo por AGEB, para la segunda hipótesis, con inferencia espacial. Porque a uno o dos kilómetros los AGEB no son independientes, y una regresión que los trate como tales daría intervalos demasiado optimistas.
+
+Y la aplicación es este mapa: una herramienta para decidir dónde mirar, con su rayado y sus supuestos a la vista.
+
+Gracias. [fin]
