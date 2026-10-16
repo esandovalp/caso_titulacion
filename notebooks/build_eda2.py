@@ -1491,8 +1491,8 @@ with mpl.rc_context(ESTILO):
     dibuja_mapa(ax2, GPOLY, MAPA_G)
     titulo_panel(ax1, f"Violencia familiar · {int(UNIV.sum()):,} AGEB", "cada polígono es un AGEB")
     titulo_panel(ax2, f"Robo a conductor · {int(GOK.sum())} grupos de AGEB", "el grano más fino que permiten sus conteos")
-    fig.suptitle("La fricción entre el aviso y la denuncia cambia entre AGEB vecinos, no entre alcaldías",
-                 fontsize=23, fontweight="bold", x=.012, ha="left", y=.975, color=TINTA)
+    fig.suptitle("La fricción entre el aviso y la denuncia cambia por zonas más chicas que la alcaldía",
+                 fontsize=21, fontweight="bold", x=.012, ha="left", y=.975, color=TINTA)
     fig.text(.012, .918, "Brecha relativa de llamadas al 911 por carpeta de la FGJ · promedio de 2019 y jul-2021→abr-2022 · escala logarítmica",
              fontsize=14.5, color=TINTA2, ha="left")
     fig.text(.012, .80, "Color: brecha del territorio ÷ brecha\ndel AGEB promedio de su ventana",
@@ -1596,14 +1596,471 @@ with mpl.rc_context(ESTILO):
 print(sorted(p.name for p in FIG.glob("*.png")))
 """)
 md(r"""
+### 10.5 Figura del deck: el mapa a pantalla completa y el acercamiento de 6 km
+
+La figura principal (10.2) pone dos paneles en 16×9, así que cada mapa queda a menos de media slide y los AGEB se vuelven indistinguibles en proyector. Para la presentación se produce **la misma cantidad, con la misma escala y el mismo universo**, en dos piezas separadas:
+
+- **`2.6_mapa_hero_violencia_familiar.png`** — un solo panel vertical, con el ancho exacto de la ciudad y la leyenda en una franja propia, así que ningún AGEB queda tapado. Sin hachurado ni círculos: las marcas de conteo bajo y de S1 viven en la figura de 10.2, que pasa a respaldo.
+- **`2.6_zoom_mosaico_1km.png`** — una ventana de 6 km del mismo mapa, donde un AGEB mide ~80 px en vez de ~12. Es la figura que hace visible la escala que midió el 2.5 (mosaico de 1–2 km) y que las fronteras de alcaldía no separan bloques de color.
+
+*Supuesto de la ventana:* la elijo con una **regla fija que no mira el color**: de todas las ventanas de 6 km sobre una malla de 500 m, la que más AGEB de conteo alto (≥ 12 carpetas en cada ventana) contiene, entre las que tocan al menos dos alcaldías; empates por la coordenada menor. Así el acercamiento no se escoge por ser el más vistoso, sino por ser donde la brecha se mide con más precisión y donde se puede ver una frontera. Si la regla cayera en una zona atípica, el mapa completo de al lado lo delataría.
+""")
+code(r"""
+import matplotlib.patheffects as pe
+from shapely.geometry import box as sbox
+
+# --- ventana del acercamiento: regla fija, sin mirar el color (ver supuesto de 10.5) ---
+LADO, PASO = 6000.0, 500.0
+CENT = GEO.geometry.representative_point()
+cxv, cyv, alcv = CENT.x.to_numpy(), CENT.y.to_numpy(), GEO.alcaldia.to_numpy()
+hi = (U & ALTO).reindex(GEO.index).fillna(False).to_numpy()
+mejor, caja = (-1, -1), None
+for x0 in np.arange(XL[0], XL[1] - LADO + 1, PASO):
+    for y0 in np.arange(YL[0], YL[1] - LADO + 1, PASO):
+        m = (cxv >= x0) & (cxv < x0 + LADO) & (cyv >= y0) & (cyv < y0 + LADO)
+        if m.sum() == 0 or len(set(alcv[m])) < 2:
+            continue
+        k = (int((m & hi).sum()), int(m.sum()))
+        if k > mejor:
+            mejor, caja = k, (x0, y0)
+X0, Y0 = caja
+EN_CAJA = (cxv >= X0) & (cxv < X0 + LADO) & (cyv >= Y0) & (cyv < Y0 + LADO)
+print(f"ventana de {LADO/1000:.0f} km en ({X0:.0f}, {Y0:.0f}) | AGEB dentro {mejor[1]}, de conteo alto {mejor[0]} "
+      f"| alcaldías {sorted(set(alcv[EN_CAJA]))}")
+
+AR = (XL[1] - XL[0]) / (YL[1] - YL[0])          # la ciudad es más alta que ancha: el panel va vertical
+V_HERO = MAPA_V.prom
+H_IN, FRANJA = 10.0, 2.8                        # franja derecha para la leyenda: no tapa ningún AGEB
+W_MAP = H_IN * AR; W_IN = W_MAP + FRANJA; FM = W_MAP / W_IN
+
+with mpl.rc_context(ESTILO):
+    figh = plt.figure(figsize=(W_IN, H_IN))
+    axh = figh.add_axes([0, 0, FM, 1]); axh.set_axis_off()
+    v = V_HERO.reindex(GEO.index)
+    GEO[v.isna()].plot(ax=axh, color=GRIS, ec="none")
+    GEO[v.notna()].assign(_v=v[v.notna()].clip(-LIM, LIM)).plot(ax=axh, column="_v", cmap=CMAP, norm=NORM, ec="none")
+    ALC_POLY.boundary.plot(ax=axh, ec="white", lw=2.8, zorder=4)
+    ALC_POLY.boundary.plot(ax=axh, ec=TINTA, lw=.7, zorder=4)
+    for lw, c in ((4.5, "white"), (2.0, TINTA)):
+        axh.add_patch(mpl.patches.Rectangle((X0, Y0), LADO, LADO, fc="none", ec=c, lw=lw, zorder=6))
+    axh.set_xlim(*XL); axh.set_ylim(*YL)
+    xt = FM + .020
+    figh.text(xt, .955, "Brecha del AGEB ÷\nla del AGEB\npromedio", fontsize=14.5, color=TINTA, va="top", linespacing=1.45)
+    figh.text(xt, .805, "más llamadas\nal 911 por carpeta", fontsize=13.5, color=TINTA2, va="top", linespacing=1.45)
+    barra_color(figh, [xt, .345, .026, .375]).ax.tick_params(labelsize=15)
+    figh.text(xt, .315, "más carpetas\nque llamadas", fontsize=13.5, color=TINTA2, va="top", linespacing=1.45)
+    figh.text(xt, .215, f"– –  brecha de la\n      ciudad (×{np.exp(REF_CIUDAD):.2f})", fontsize=13.5, color=TINTA,
+              va="top", linespacing=1.45)
+    figh.text(xt, .125, f"Gris: sin carpetas\nen una ventana\n({int((~UNIV).sum())} de {len(ageb):,} AGEB)",
+              fontsize=13.5, color=TINTA2, va="top", linespacing=1.45)
+    figh.savefig(FIG / "2.6_mapa_hero_violencia_familiar.png", dpi=DPI)
+    plt.show()
+
+SEL = GEO.cx[X0:X0 + LADO, Y0:Y0 + LADO]
+with mpl.rc_context(ESTILO):
+    LADO_IN, FS_ALC = 7.0, 21
+    figz = plt.figure(figsize=(LADO_IN, LADO_IN))
+    axz = figz.add_axes([0, 0, 1, 1]); axz.set_axis_off()
+    v = V_HERO.reindex(SEL.index)
+    SEL[v.isna()].plot(ax=axz, color=GRIS, ec="white", lw=.7)
+    SEL[v.notna()].assign(_v=v[v.notna()].clip(-LIM, LIM)).plot(ax=axz, column="_v", cmap=CMAP, norm=NORM, ec="white", lw=.7)
+    ix = SEL.index.intersection(BAJO[BAJO.fillna(False)].index.intersection(U[U].index))
+    SEL.loc[ix].plot(ax=axz, fc="none", ec="white", lw=0, hatch="///", alpha=.8, zorder=3)
+    ALC_POLY.boundary.plot(ax=axz, ec="white", lw=5.5, zorder=4)
+    ALC_POLY.boundary.plot(ax=axz, ec=TINTA, lw=1.6, zorder=4)
+    for a, g in ALC_POLY.geometry.items():
+        c = g.intersection(sbox(X0, Y0, X0 + LADO, Y0 + LADO))
+        if c.is_empty or c.area < 2.5e6:          # no etiquetar una esquina de 2.5 km2
+            continue
+        q = c.representative_point()
+        hw = .5 * len(a) * .52 * (FS_ALC / 72) * (LADO / LADO_IN) + 180
+        axz.text(min(max(q.x, X0 + hw), X0 + LADO - hw), min(max(q.y, Y0 + .04 * LADO), Y0 + .96 * LADO),
+                 a.title(), fontsize=FS_ALC, color=TINTA, ha="center", va="center", zorder=7,
+                 path_effects=[pe.withStroke(linewidth=5, foreground="white")])
+    axz.plot([X0 + 400, X0 + 1400], [Y0 + 330, Y0 + 330], color=TINTA, lw=3.2, zorder=7, solid_capstyle="butt")
+    axz.text(X0 + 900, Y0 + 450, "1 km", fontsize=18, color=TINTA, ha="center", va="bottom", zorder=7,
+             path_effects=[pe.withStroke(linewidth=4, foreground="white")])
+    axz.set_xlim(X0, X0 + LADO); axz.set_ylim(Y0, Y0 + LADO)
+    figz.savefig(FIG / "2.6_zoom_mosaico_1km.png", dpi=DPI)
+    plt.show()
+print(f"AGEB dibujados en el acercamiento: {len(SEL)} | hachurados (conteo bajo): {len(ix)} | "
+      f"sin color (sin carpetas en una ventana): {int(v.isna().sum())}")
+print(sorted(p.name for p in FIG.glob("*.png")))
+""")
+md(r"""
+**Interpretación (acercamiento):** dentro de una ventana de 6 km conviven AGEB en azul fuerte y en rojo fuerte pegados, y la frontera de alcaldía la cruza por en medio sin separar bloques de color. Es la misma conclusión que el 2.3 midió (la alcaldía explica el 11%) y que el 2.5 fechó en 1–2 km, pero vista en vez de citada.
+""")
+
+md(r"""
 **Interpretación (conteo alto):** con un cuarto de los AGEB pero más de la mitad de las carpetas, el mosaico sigue cruzando las fronteras de alcaldía y la proporción de AGEB que saturan la escala cae a la mitad, que es justo lo que predice quitar ruido de conteo. *Supuesto:* leo este mapa como el mismo fenómeno visto con menos ruido, asumiendo que los AGEB con ≥ 12 carpetas no son un subconjunto con otra fricción; si lo fueran (por ejemplo, si solo los AGEB densos tuvieran brecha alta), este mapa y el completo no se parecerían, y se parecen.
 
-### 10.5 Qué deja el 2.6
+### 10.6 Qué deja el 2.6
 
-- Tres PNG en `resultados/figuras/`, con nombres estables: `2.6_mapa_brecha_violencia_familiar_ageb.png` (slide 7), `2.6_mapa_brecha_por_ventana.png` y `2.6_mapa_brecha_conteo_alto.png` (respaldo). Se regeneran corriendo esta sección; no dependen de ningún CSV intermedio nuevo.
-- **La figura dice una frase:** la fricción entre el aviso y la denuncia cambia entre AGEB vecinos y no respeta las fronteras de alcaldía. El mapa de robo a conductor al lado muestra que, cuando los conteos obligan a agregar, esa misma señal se vuelve un mapa de alcaldías.
+- Cinco PNG en `resultados/figuras/`, con nombres estables: `2.6_mapa_hero_violencia_familiar.png` y `2.6_zoom_mosaico_1km.png` (las dos del deck, 10.5), y `2.6_mapa_brecha_violencia_familiar_ageb.png`, `2.6_mapa_brecha_por_ventana.png` y `2.6_mapa_brecha_conteo_alto.png` (respaldo). Se regeneran corriendo esta sección; no dependen de ningún CSV intermedio nuevo.
+- **La figura dice una frase:** la fricción entre el aviso y la denuncia cambia por zonas más chicas que la alcaldía y no respeta sus fronteras. El mapa de robo a conductor al lado muestra que, cuando los conteos obligan a agregar, esa misma señal se vuelve un mapa de alcaldías. *(Frase actualizada el 13 de oct con la lectura del 2.5: el correlograma ubica el mosaico en 1–2 km, así que no es "de un AGEB al de al lado" ni un gradiente de alcaldía.)*
 - **Lo que no dice:** cuánto subregistro hay. Ordena territorios (S6). El nivel de ciudad lo acota la ENDIREH en el 2.4.
 - **Queda para el 2.5** la pregunta que el mapa plantea y no responde: si el mosaico es ruido espacial o un gradiente suave sub-alcaldía. El I de Moran lo separa, y a ojo el mapa tiene las dos cosas.
+""")
+
+md(r"""
+## 11. Experimento 2.5 — Diagnóstico de AGEB: conteos bajos, denominador y autocorrelación espacial (`resultados/15_`)
+
+Esta sección **no recalcula la brecha ni los componentes de varianza**: lee `vf` y `rc` de la sección 8 (= `resultados/11_`), los componentes `h1` de la sección 9 (= `resultados/13_`) y la cantidad `MAPA_V.prom` de la sección 10, que es exactamente lo que pinta el mapa de la slide 7.
+
+**La pregunta que el 2.6 dejó abierta.** H1 probó que la brecha varía más entre AGEB de la misma alcaldía que entre alcaldías (razón 4.82; ICC de alcaldía 0.110). Lo que H1 **no** separa es si esa variación sub-alcaldía es un **mosaico fino** de AGEB vecinos distintos o un **gradiente suave** que recorre varios AGEB: a ojo el mapa tiene las dos cosas (riesgo registrado el 9 de oct). Esa diferencia no cambia el veredicto de H1 — cambia la frase que se dice en voz alta en la slide 7.
+
+**Regla de lectura fijada el 11 de oct en `PLAN_15_OCT.md` §3.4, antes de calcular cualquier estadístico espacial.** Se repite aquí lo que decide:
+- Cantidad: `m` = media de los dos log de la brecha centrados por ventana, en los **2,294 AGEB con ≥ 1 carpeta en cada ventana**, peso igual. Vecindad: polígonos que se tocan (tolerancia 1 m, EPSG:6372), **sin** restringir a la alcaldía, estandarizada por filas.
+- **El I observado está atenuado:** el ruido de conteo es espacialmente independiente, así que entra al denominador del I y no al numerador. Se reporta `I_obs` (cota inferior) y `I_corr = I_obs × Var(z) / (Var(z) − ruido binomial)`, con el ruido binomial conocido del 2.3 (v̄/2 para las dos ventanas, v̄ para una sola).
+- Dos nulas de 1,000 réplicas con semilla 2026: **permutación** de `m` entre AGEB (cualquier estructura espacial) y la **nula de homogeneidad del 2.3(a)** (llamadas ~ Binomial(n observado, p̂ de su alcaldía y ventana)), que conserva el nivel de alcaldía *y* el ruido de conteo: superarla significa autocorrelación **más allá** de las fronteras de alcaldía.
+- **Decide el `I_corr` de los residuos dentro de alcaldía** (`m` menos la media de su alcaldía), porque la pregunta es sobre la variación sub-alcaldía: `< 0.10` mosaico fino · `0.10–0.25` coexisten las dos estructuras · `≥ 0.25` hay gradiente suave y la frase de la slide 7 se matiza.
+
+*Supuesto (por qué no hay IC bootstrap del I):* reporto la incertidumbre del I con sus dos nulas y con el z analítico, no con un bootstrap, asumiendo que remuestrear AGEB destruiría justo la vecindad que el estadístico mide; si se quisiera un IC, habría que remuestrear bloques espaciales contiguos, que con 2,294 unidades y una sola realización del proceso no está identificado.
+""")
+
+md("### 11.1 Vecindad, estimador del I de Moran y corrección por atenuación")
+code(r"""
+import scipy.sparse as ssp
+
+AG_U = MAPA_V.index[U.to_numpy()]                      # universo del 2.3 y del mapa: >= 1 carpeta en cada ventana
+assert ageb.set_index("ageb").geometry.reindex(AG_U).notna().all()   # los 2 AGEB sin polígono no entran (no tienen eventos)
+POS = {a: i for i, a in enumerate(AG_U)}
+NU = len(AG_U)
+
+def contiguidad(ids):
+    # polígonos que se tocan, con tolerancia de 1 m en EPSG:6372 (misma vecindad que la agregación de H3, sin restringir a la alcaldía)
+    b = gpd.GeoDataFrame(geometry=GEO.loc[ids].buffer(1.0)).reset_index()
+    pr = gpd.sjoin(b, b, predicate="intersects")
+    pr = pr[pr.ageb_left != pr.ageb_right]
+    pos = {a: i for i, a in enumerate(ids)}
+    i = pr.ageb_left.map(pos).to_numpy(); j = pr.ageb_right.map(pos).to_numpy()
+    C = ssp.csr_matrix((np.ones(len(i)), (i, j)), shape=(len(ids), len(ids)))
+    C.data[:] = 1.0
+    return C
+
+def fila_estandar(C):
+    d = np.asarray(C.sum(1)).ravel()
+    return ssp.diags(np.where(d > 0, 1.0 / np.maximum(d, 1.0), 0.0)) @ C, d
+
+def moran(z, W):
+    z = np.asarray(z, float) - np.asarray(z, float).mean()
+    return float(z @ (W @ z) / (z @ z))
+
+def moran_z(I, W, n):
+    # z analítico bajo normalidad (descriptivo: con n grande sirve para el signo y el orden de magnitud, no para un p fino)
+    S0 = float(W.sum()); A = W + W.T
+    S1 = 0.5 * float(A.multiply(A).sum())
+    rs = np.asarray(W.sum(1)).ravel(); cs = np.asarray(W.sum(0)).ravel()
+    S2 = float(((rs + cs) ** 2).sum())
+    EI = -1.0 / (n - 1)
+    VI = (n * n * S1 - n * S2 + 3 * S0 * S0) / ((n * n - 1) * S0 * S0) - EI ** 2
+    return (I - EI) / np.sqrt(VI), EI, np.sqrt(VI)
+
+def resid_alc(x, g):
+    s = np.bincount(g, weights=x, minlength=K_ALC); k = np.bincount(g, minlength=K_ALC)
+    mb = np.divide(s, k, out=np.zeros(K_ALC), where=k > 0)
+    return x - mb[g]
+
+C_U = contiguidad(AG_U)
+W_U, GRADO = fila_estandar(C_U)
+g_u = np.array([A_COD[a] for a in ALC_DE_AGEB.reindex(AG_U)])
+
+# la cantidad y su ruido conocido, los mismos del 2.3 y del 2.6
+MU = {"ambas": MAPA_V.prom.reindex(AG_U).to_numpy(float)}
+MU.update({w: MAPA_V[w].reindex(AG_U).to_numpy(float) for w in VENT})
+VU = (1.0 / (LLv + 0.5) + 1.0 / (CARv + 0.5))[U.to_numpy()]
+RUIDO_V = {"ambas": float(VU.mean()) / 2, **{w: float(VU[:, i].mean()) for i, w in enumerate(VENT)}}
+assert np.isclose(RUIDO_V["ambas"], VBAR / 2)
+NT = (LLv + CARv)[U.to_numpy()].round().astype(np.int64)
+_num = np.column_stack([np.bincount(g_u, weights=LLv[U.to_numpy()][:, c], minlength=K_ALC) for c in range(2)])
+_tot = np.column_stack([np.bincount(g_u, weights=NT[:, c].astype(float), minlength=K_ALC) for c in range(2)])
+P_HOM = np.divide(_num, _tot, out=np.full_like(_num, 0.5), where=_tot > 0)[g_u]
+
+def sim_homogeneidad(rng):
+    # misma nula que 9.3: cada AGEB con la p de su alcaldía y ventana, n observado fijo; centrado por ventana igual que el observado
+    ll = rng.binomial(NT, P_HOM).astype(float)
+    car = (NT - ll).astype(float)
+    y = np.log((ll + 0.5) / (car + 0.5))
+    return y - y.mean(axis=0, keepdims=True)
+
+print(f"AGEB en el universo: {NU:,} | vecinos por AGEB: mediana {np.median(GRADO):.0f}, rango {GRADO.min():.0f}–{GRADO.max():.0f} "
+      f"| AGEB sin vecinos en el universo: {int((GRADO == 0).sum())} | pares de vecindad: {int(C_U.nnz / 2):,}")
+print("Ruido binomial conocido (varianza en la escala del log de la brecha):", {k: round(v, 4) for k, v in RUIDO_V.items()})
+print(f"Var(m) = {np.var(MU['ambas']):.3f}; factor de atenuación = {np.var(MU['ambas']) / (np.var(MU['ambas']) - RUIDO_V['ambas']):.2f}x")
+""")
+md(r"""
+**Lectura (vecindad y atenuación):** la contigüidad da una malla sana —6 vecinos por AGEB en la mediana, 6,697 pares— y solo **1 AGEB del universo queda aislado** (no toca ningún otro AGEB con carpetas en las dos ventanas): aporta su varianza al denominador del I y nada al numerador, así que lo sesga hacia cero en 1 de 2,294 unidades, que es despreciable y se reporta en vez de descartarlo. El factor de atenuación es **2.32×** sobre `m` (Var = 0.361, ruido binomial conocido 0.206) y **2.53×** sobre los residuos dentro de alcaldía: **más de la mitad de la varianza visible del mapa es ruido de conteo**, y por eso el I observado no se puede leer como si fuera el del proceso subyacente. El ruido de una sola ventana es el doble (0.426 y 0.396), así que las filas por ventana llevan correcciones mayores y menos confiables que la fila de las dos ventanas juntas, que es la que decide.
+""")
+
+md("### 11.2 I de Moran de la brecha: total y dentro de alcaldía, con sus dos nulas")
+code(r"""
+def fila_moran(nombre, mask, W, clave, residual, B=B_REP, semilla=SEMILLA):
+    g = g_u[mask]
+    m = MU[clave][mask]
+    z = resid_alc(m, g) if residual else m - m.mean()
+    I = moran(z, W)
+    # el ruido binomial se calcula sobre las MISMAS unidades: el subconjunto de conteo alto tiene un tercio del ruido del universo
+    vm = VU[mask]
+    var_z = float(np.var(z))
+    ruido = float(vm.mean()) / 2 if clave == "ambas" else float(vm[:, VENT.index(clave)].mean())
+    I_corr = I * var_z / (var_z - ruido) if var_z > ruido else np.nan
+    rng = np.random.default_rng(semilla)
+    perm = np.array([moran(rng.permutation(z), W) for _ in range(B)])
+    rng = np.random.default_rng(semilla)
+    hom = np.empty(B)
+    for b in range(B):
+        zz = sim_homogeneidad(rng)
+        mm = (zz.mean(axis=1) if clave == "ambas" else zz[:, VENT.index(clave)])[mask]
+        hom[b] = moran(resid_alc(mm, g) if residual else mm - mm.mean(), W)
+    za, EI, sd = moran_z(I, W, int(mask.sum()))
+    return {"subconjunto": nombre, "cantidad": "residuos dentro de alcaldía" if residual else "m (incluye nivel de alcaldía)",
+            "ventana": clave, "n_ageb": int(mask.sum()), "I_obs": I, "I_corr": I_corr,
+            "var_z": var_z, "ruido_binomial": ruido, "atenuacion": var_z / (var_z - ruido) if var_z > ruido else np.nan,
+            "z_analitico": za, "E_I": EI,
+            "p95_nula_perm": np.percentile(perm, 95), "p_perm": (1 + (perm >= I).sum()) / (B + 1),
+            "p95_nula_homog": np.percentile(hom, 95), "p_homog": (1 + (hom >= I).sum()) / (B + 1)}
+
+TODO_U = np.ones(NU, bool)
+AG_A = MAPA_V.index[(U & ALTO).to_numpy()]
+mask_alto = np.isin(AG_U, AG_A)
+W_A, GRADO_A = fila_estandar(contiguidad(list(AG_A)))
+print(f"Subconjunto de conteo alto: {len(AG_A)} AGEB | con al menos un vecino dentro del subconjunto: {int((GRADO_A > 0).sum())}")
+
+mor = pd.DataFrame([fila_moran("universo (2,294 AGEB)", TODO_U, W_U, w, r) for w in ["ambas"] + VENT for r in (True, False)]
+                   + [fila_moran(f"conteo alto (>= {UMBRAL} carpetas)", mask_alto, W_A, "ambas", r) for r in (True, False)])
+UMB_MOS, UMB_GRAD = 0.10, 0.25   # umbrales fijados en PLAN §3.4 antes de calcular
+mor["veredicto"] = pd.cut(mor.I_corr, [-np.inf, UMB_MOS, UMB_GRAD, np.inf],
+                          labels=["mosaico fino", "coexisten las dos estructuras", "gradiente suave"]).astype(str)
+mor.loc[mor.cantidad != "residuos dentro de alcaldía", "veredicto"] = "(no decide: incluye el nivel de alcaldía)"
+display(mor.set_index(["subconjunto", "cantidad", "ventana"]).round(4))
+
+# contexto: ¿dónde está la autocorrelación que sí hay? indicadores sin atenuación conocida
+car_u = CARv[U.to_numpy()].sum(axis=1)
+extra = []
+for nom, x in [("indicador de conteo bajo (< 12 carpetas en alguna ventana)", BAJO.reindex(AG_U).astype(float).to_numpy()),
+               ("log(carpetas de las dos ventanas)", np.log(car_u)),
+               ("indicador de sensibilidad a S1", SENS1.reindex(AG_U).astype(float).to_numpy())]:
+    z = x - x.mean(); I = moran(z, W_U)
+    rng = np.random.default_rng(SEMILLA)
+    perm = np.array([moran(rng.permutation(z), W_U) for _ in range(B_REP)])
+    extra.append({"variable": nom, "I_obs": I, "p95_nula_perm": np.percentile(perm, 95),
+                  "p_perm": (1 + (perm >= I).sum()) / (B_REP + 1), "z_analitico": moran_z(I, W_U, NU)[0]})
+extra = pd.DataFrame(extra)
+display(extra.round(4))
+""")
+
+md(r"""
+**Lectura (el veredicto del 2.5).** Con la regla del §3.4: **coexisten las dos estructuras, y el caso queda pegado al umbral del gradiente.**
+
+- **Hay autocorrelación y no la explican las alcaldías.** En los residuos dentro de alcaldía de las dos ventanas, **I = 0.097**, contra un percentil 95 de **0.021** en la nula de permutación y de **0.018** en la nula de homogeneidad (p = 0.001 en las dos, el mínimo posible con 1,000 réplicas; z analítico 7.6). La nula de homogeneidad es la que importa: conserva el nivel de cada alcaldía *y* el ruido de conteo, así que superarla significa que **AGEB vecinos de la misma alcaldía se parecen entre sí más de lo que explica el azar**. El ruido de conteo, por construcción, tendría I = 0.
+- **Corregido por atenuación, I = 0.245**, es decir **"coexisten las dos estructuras"** por 0.005 de margen. Un estimador puntual no distingue 0.245 de 0.25, así que el veredicto honesto es el de la banda intermedia **con la advertencia de que está en su borde superior**: por ventana da 0.268 (2019, que cruzaría a "gradiente suave") y 0.239 (2021–22).
+- **La conclusión no depende de la corrección.** En los 698 AGEB de conteo alto el ruido es un tercio (0.066 contra 0.206) y la corrección apenas 1.51×: ahí el I observado es **más alto** (0.119, p = 0.001) y el corregido da **0.180**, en la misma banda. Que la corrección grande dé 0.245 y la chica 0.180 acota cuánto puede estar inflando el supuesto de independencia del ruido.
+- **Por qué decide el residual y no `m`.** Sin quitar la media de la alcaldía, I = 0.146 y corregido 0.340, pero esa cifra mezcla dos cosas: contra la nula de homogeneidad su p sube a 0.005 y en 2021–22 a 0.034, justo porque parte de ese I lo produce la heterogeneidad **entre** alcaldías, que es lo que esa nula conserva. El §3.4 ya había fijado que decide el residual.
+- **Contexto que importa para leer el mapa:** el indicador de conteo bajo está muy agrupado (**I = 0.242**, p = 0.001) y el volumen de carpetas más todavía (log(carpetas), **I = 0.364**). El hachurado del mapa de la slide 7 **no es ruido disperso: es una región**. La sensibilidad a S1 casi no se agrupa (I = 0.073), lo cual es tranquilizador para S1: la contaminación con robo no está concentrada en una zona.
+
+*Supuesto:* leo `I_corr` como el I del proceso subyacente asumiendo que el ruido binomial es espacialmente independiente dado n; si los duplicados del 911 se concentraran entre vecinos (un mismo hecho llamado varias veces desde la misma cuadra), la corrección sobreestimaría y la cifra honesta sería el I observado (0.097), que seguiría siendo distinto de cero pero caería en la banda de "mosaico fino". Por eso se reportan las dos.
+
+**Qué cambia para el 15 de oct:** la frase de la slide 7 pasa de *"cambia de un AGEB al de al lado"* a *"cambia por zonas más chicas que la alcaldía, que no respetan sus fronteras"*. **H1 no se toca:** sigue siendo cierto que la varianza entre AGEB de la misma alcaldía es 4.8× la de entre alcaldías; lo que el 2.5 agrega es que esa varianza sub-alcaldía tiene estructura espacial, así que el AGEB es el grano que **permite ver** esas zonas, no la unidad en la que ocurre el fenómeno.
+""")
+
+md("### 11.3 Correlograma: a qué distancia se apaga la estructura")
+code(r"""
+CEN_U = GEO.loc[AG_U].geometry.centroid
+XY = np.column_stack([CEN_U.x.to_numpy(), CEN_U.y.to_numpy()])
+D = np.sqrt(((XY[:, None, :] - XY[None, :, :]) ** 2).sum(-1)) / 1000.0   # km entre centroides
+BANDAS = [(0, 1), (1, 2), (2, 4), (4, 8), (8, 16)]
+
+m_res = resid_alc(MU["ambas"], g_u)
+corr = []
+for lo, hi in BANDAS:
+    B_ = ssp.csr_matrix(((D > max(lo, 1e-9)) & (D <= hi)).astype(float))
+    Wb, db = fila_estandar(B_)
+    keep = db > 0
+    Wb = ssp.csr_matrix(Wb.toarray()[np.ix_(keep, keep)])
+    Wb, _ = fila_estandar(ssp.csr_matrix((Wb > 0).astype(float)))
+    z = m_res[keep] - m_res[keep].mean()
+    I = moran(z, Wb)
+    var_z = float(np.var(z)); at = var_z / (var_z - RUIDO_V["ambas"])
+    za, EI, sd = moran_z(I, Wb, int(keep.sum()))
+    corr.append({"banda_km": f"{lo}–{hi}", "n_ageb": int(keep.sum()), "vecinos_medianos": float(np.median(db[keep])),
+                 "I_obs": I, "I_corr": I * at, "z_analitico": za, "ic95_nula_inf": EI - 1.96 * sd, "ic95_nula_sup": EI + 1.96 * sd})
+corr = pd.DataFrame(corr)
+display(corr.round(4))
+del D
+""")
+
+md(r"""
+**Lectura (escala del patrón):** la estructura se apaga **antes de los 2 km**. Corregido por atenuación, el I es **0.224 entre 0 y 1 km**, **0.081 entre 1 y 2 km** y luego nada: −0.010 (2–4 km), −0.018 (4–8 km) y 0.001 (8–16 km). El z de −3.9 en la banda de 4–8 km no describe un patrón: con 356 vecinos por AGEB en la mediana, una desviación de −0.018 sale "significativa" y su magnitud es despreciable; es justo el caso donde la aproximación normal no debe leerse como un hallazgo.
+
+Esto es lo que resuelve la duda del 9 de oct: lo que el ojo leía como "zonas amplias del mismo color" son **vecindades de 1 a 2 km**, un orden de magnitud por debajo del tamaño de una alcaldía. No hay gradiente de escala de alcaldía (si lo hubiera, el I seguiría positivo a 4 y 8 km, y es cero). La variación sub-alcaldía que H1 midió es, entonces, **mosaico de barrio**: no AGEB independientes, pero tampoco regiones grandes.
+
+*Supuesto:* uso bandas de distancia entre centroides asumiendo que el AGEB es lo bastante compacto para que su centroide lo represente. En la periferia (Milpa Alta, Tláhuac, Xochimilco) hay AGEB grandes donde dos centroides a 2 km pueden ser polígonos que se tocan, así que la banda de 1–2 km mezcla algo de contigüidad; si se quisiera separarlas, habría que medir distancia entre bordes, que con 2,294 polígonos no cambia la conclusión porque el apagón ocurre después.
+""")
+
+md("### 11.4 Conteos bajos y denominador: qué parte del mapa no se puede medir")
+code(r"""
+diag_cnt = []
+for w in VENT:
+    s = vf.xs(w)
+    bajo = s.carpetas < UMBRAL
+    diag_cnt.append({"ventana": w, "ageb_conteo_bajo": int(bajo.sum()), "ageb_sin_carpetas": int((s.carpetas == 0).sum()),
+                     "pct_ageb_conteo_bajo": bajo.mean(),
+                     "pct_carpetas_en_conteo_bajo": s.carpetas[bajo].sum() / s.carpetas.sum(),
+                     "pct_llamadas_en_conteo_bajo": s.llamadas[bajo].sum() / s.llamadas.sum(),
+                     "carpetas_mediana": float(s.carpetas.median()), "carpetas_p90": float(s.carpetas.quantile(.9))})
+diag_cnt = pd.DataFrame(diag_cnt).set_index("ventana")
+display(diag_cnt.round(4))
+
+mb = MU["ambas"][mask_alto]; mp = MU["ambas"][~mask_alto]
+u_mw = stats.mannwhitneyu(mb, mp, alternative="two-sided")
+print(f"m en los {mask_alto.sum()} AGEB de conteo alto: mediana {np.median(mb):+.3f} (x{np.exp(np.median(mb)):.2f}), "
+      f"desv. est. {mb.std():.3f} | en los {(~mask_alto).sum():,} de conteo bajo: mediana {np.median(mp):+.3f} "
+      f"(x{np.exp(np.median(mp)):.2f}), desv. est. {mp.std():.3f} | Mann-Whitney p = {u_mw.pvalue:.3g}")
+
+pb = BAJO.reindex(AG_U).groupby(ALC_DE_AGEB.reindex(AG_U)).mean().sort_values()
+print(f"Fracción de AGEB con conteo bajo, por alcaldía (universo del mapa): mínimo {pb.iloc[0]:.0%} ({pb.index[0]}), "
+      f"máximo {pb.iloc[-1]:.0%} ({pb.index[-1]}), ciudad {int((U & BAJO).sum()) / NU:.0%} "
+      f"| las 3 más bajas: {[f'{a} {v:.0%}' for a, v in pb.head(3).items()]} | las 3 más altas: {[f'{a} {v:.0%}' for a, v in pb.tail(3).items()]}")
+
+viv_u = ageb.set_index("ageb").viv.reindex(AG_U)
+viv_all = ageb.set_index("ageb").viv
+prot = vf.viv_protegido.groupby("ageb").any()
+den = pd.DataFrame([
+    {"grupo": "viviendas = 0", "n_ageb": int((viv_all == 0).sum()), "n_en_universo": int((viv_u == 0).sum()),
+     "carpetas_22m": int(vf.carpetas[vf.viv_cero].sum()), "llamadas_22m": int(vf.llamadas[vf.viv_cero].sum())},
+    {"grupo": "dato protegido (*)", "n_ageb": int(prot.sum()), "n_en_universo": int(prot.reindex(AG_U).fillna(False).sum()),
+     "carpetas_22m": int(vf.carpetas[vf.viv_protegido].sum()), "llamadas_22m": int(vf.llamadas[vf.viv_protegido].sum())},
+    {"grupo": "0 < viviendas < 50", "n_ageb": int(viv_all.between(1, 49).sum()), "n_en_universo": int(viv_u.between(1, 49).sum()),
+     "carpetas_22m": int(vf.carpetas[vf.index.get_level_values("ageb").map(viv_all.between(1, 49)).fillna(False)].sum()),
+     "llamadas_22m": int(vf.llamadas[vf.index.get_level_values("ageb").map(viv_all.between(1, 49)).fillna(False)].sum())},
+    {"grupo": "viviendas >= 50 (denominador usable)", "n_ageb": int((viv_all >= 50).sum()), "n_en_universo": int((viv_u >= 50).sum()),
+     "carpetas_22m": int(vf.carpetas[vf.index.get_level_values("ageb").map(viv_all >= 50).fillna(False)].sum()),
+     "llamadas_22m": int(vf.llamadas[vf.index.get_level_values("ageb").map(viv_all >= 50).fillna(False)].sum())}]).set_index("grupo")
+den["pct_carpetas_22m"] = den.carpetas_22m / den.carpetas_22m.sum()
+display(den)
+chicos = vf[vf.index.get_level_values("ageb").map(viv_all.between(1, 49)).fillna(False)]
+print("Tasas por 1,000 viviendas en los AGEB con < 50 viviendas (máximo): "
+      f"carpetas {chicos.carpetas_por_1k_viv.max():,.0f} | llamadas {chicos.llamadas_por_1k_viv.max():,.0f} "
+      f"| contra el p99 de los AGEB con >= 50 viviendas: "
+      f"{vf.carpetas_por_1k_viv[vf.index.get_level_values('ageb').map(viv_all >= 50).fillna(False)].quantile(.99):,.0f}")
+""")
+
+md(r"""
+**Lectura (conteos bajos y denominador):**
+
+- **Cuántos y cuánto pesan.** 1,570 AGEB (64.5%) en 2019 y 1,425 (58.6%) en 2021–22 tienen menos de 12 carpetas, pero concentran solo **34.2% y 27.5% de las carpetas** y 41.4% y 34.9% de las llamadas. La mediana es de 9 carpetas por AGEB y el p90 de 22–24: el fenómeno es de pocos casos por territorio, y de ahí el umbral de 12 fijado el 5 de oct.
+- **El límite más fuerte del mapa, y hay que decirlo en voz alta.** Los AGEB de conteo bajo **no son intercambiables** con el resto: su `m` mediana es **+0.089 (×1.09)** contra **−0.010 (×0.99)** en los de conteo alto, con Mann-Whitney **p = 5×10⁻⁶**, y además están **agrupados en el territorio** (I = 0.242). Parte de esa diferencia es **mecánica, no un hallazgo**: la brecha lleva las carpetas en el denominador, así que agrupar por "pocas carpetas" selecciona justo lo que empuja la razón hacia arriba, y la corrección de 0.5 del logit empírico pesa más donde los conteos son chicos. **No son la periferia:** la fracción de AGEB con conteo bajo va de 37% en Cuajimalpa y Magdalena Contreras a **82% en Benito Juárez**, que es céntrica y de ingreso alto; lo que define al grupo es tener pocas carpetas, no estar lejos. **Consecuencia para la slide 7:** el hachurado se ve sistemáticamente más rojo y eso **no** se debe leer como que ahí hay más fricción. El respaldo 10.4 (solo los 698 AGEB de conteo alto) es la figura que responde esa objeción.
+- **Denominador (afecta a las tasas y a H2, no a la brecha).** 20 AGEB con **viviendas = 0** (15 en el universo del mapa, 177 carpetas), 12 con **dato protegido `*`** (10 en el universo, 79 carpetas) y 36 con **1–49 viviendas** (19 en el universo, 235 carpetas): juntos son **0.9% de las carpetas** de los 22 meses. Los 2,365 AGEB con ≥ 50 viviendas concentran el 99.1%. En los de menos de 50 viviendas la tasa llega a **7,250 carpetas por 1,000 viviendas**, contra un p99 de **44** en los demás: son AGEB comerciales o institucionales y sus tasas no deben mapearse nunca. La brecha no usa denominador, así que el mapa del 2.6 no está afectado; el 2.2 y H2 sí, y por eso S5 excluye estos AGEB.
+""")
+
+md("### 11.5 Figura de respaldo: correlograma y dónde está lo que no se puede medir")
+code(r"""
+with mpl.rc_context(ESTILO):
+    fig5, axes = plt.subplots(1, 3, figsize=(16, 5.4), gridspec_kw={"width_ratios": [1.0, 1.0, 1.1]})
+    a0 = axes[0]
+    xs = np.arange(len(corr))
+    a0.axhspan(corr.ic95_nula_inf.min(), corr.ic95_nula_sup.max(), color=GRIS, alpha=.6, lw=0, label="IC 95% de la nula (sin estructura)")
+    a0.plot(xs, corr.I_obs, "o-", color="#256abf", lw=2, label="I observado (atenuado por ruido)")
+    a0.plot(xs, corr.I_corr, "s--", color="#8f2322", lw=2, label="I corregido por atenuación")
+    a0.axhline(UMB_MOS, color=TINTA2, lw=.8, ls=":")
+    a0.axhline(UMB_GRAD, color=TINTA2, lw=.8, ls=":")
+    a0.text(len(corr) - .05, UMB_GRAD, " gradiente", fontsize=9, color=TINTA2, va="bottom", ha="right")
+    a0.text(len(corr) - .05, UMB_MOS, " mosaico", fontsize=9, color=TINTA2, va="top", ha="right")
+    a0.set_xticks(xs); a0.set_xticklabels(corr.banda_km)
+    a0.set_xlabel("distancia entre centroides (km)"); a0.set_ylabel("I de Moran de la brecha, dentro de alcaldía")
+    a0.set_title("La estructura se apaga en los primeros kilómetros", fontsize=12, loc="left")
+    a0.legend(fontsize=8.5, loc="upper right", framealpha=.9)
+
+    a1 = axes[1]
+    for w, c in zip(VENT, ["#256abf", "#8f2322"]):
+        s = vf.xs(w).carpetas.clip(upper=60)
+        a1.hist(s, bins=np.arange(0, 62, 2), histtype="step", lw=2, color=c, label=f"{w} (mediana {vf.xs(w).carpetas.median():.0f})")
+    a1.axvline(UMBRAL, color=TINTA, lw=1.4, ls="--")
+    a1.text(UMBRAL + 1.2, a1.get_ylim()[1] * .92, f"umbral de {UMBRAL} carpetas\n(CV de Poisson 28.9%)", fontsize=9, color=TINTA, va="top")
+    a1.set_xlabel("carpetas de violencia familiar por AGEB (recortado en 60)"); a1.set_ylabel("AGEB")
+    a1.set_title("La mayoría de los AGEB tiene pocos casos", fontsize=12, loc="left")
+    a1.legend(fontsize=9)
+
+    a2 = axes[2]
+    cap = GEO.assign(_b=BAJO.reindex(GEO.index), _u=U.reindex(GEO.index).fillna(False))
+    cap[~cap._u].plot(ax=a2, color=GRIS, ec="none")
+    cap[cap._u & cap._b.fillna(False)].plot(ax=a2, color="#f0a39f", ec="none")
+    cap[cap._u & ~cap._b.fillna(False)].plot(ax=a2, color="#256abf", ec="none")
+    ALC_POLY.boundary.plot(ax=a2, ec="white", lw=1.2, zorder=4)
+    ALC_POLY.boundary.plot(ax=a2, ec=TINTA, lw=.4, zorder=4)
+    a2.set_xlim(*XL); a2.set_ylim(*YL); a2.set_axis_off()
+    a2.set_title("Dónde no se mide con precisión", fontsize=12, loc="left")
+    a2.legend(handles=[Patch(fc="#256abf", label=f">= {UMBRAL} carpetas en cada ventana ({int((U & ALTO).sum())})"),
+                       Patch(fc="#f0a39f", label=f"conteo bajo ({int((U & BAJO).sum()):,})"),
+                       Patch(fc=GRIS, label=f"fuera del universo ({int((~U).sum())})")],
+              fontsize=9, loc="upper left", bbox_to_anchor=(0, 0.06), frameon=False)
+    fig5.suptitle("Diagnóstico del 2.5: escala del patrón, conteos bajos y dónde están", fontsize=16, fontweight="bold", x=.01, ha="left")
+    fig5.tight_layout(rect=[0, 0, 1, .94])
+    fig5.savefig(FIG / "2.5_diagnostico_ageb.png", dpi=DPI)
+    plt.show()
+print(sorted(p.name for p in FIG.glob("*.png")))
+""")
+
+md("### 11.6 Exportar `resultados/15_diagnostico_ageb.csv`")
+code(r"""
+filas = []
+for r in mor.to_dict("records"):
+    filas.append({"bloque": "autocorrelacion", "indicador": "I de Moran (contigüidad, estandarizada por filas)",
+                  "variante": f"{r['subconjunto']} · {r['cantidad']}", "ventana": r["ventana"], "n_ageb": r["n_ageb"],
+                  "valor": r["I_obs"], "valor_corregido": r["I_corr"], "factor_atenuacion": r["atenuacion"],
+                  "p95_nula_perm": r["p95_nula_perm"], "p_perm": r["p_perm"],
+                  "p95_nula_homog": r["p95_nula_homog"], "p_homog": r["p_homog"], "z_analitico": r["z_analitico"],
+                  "lectura": r["veredicto"]})
+for r in extra.to_dict("records"):
+    filas.append({"bloque": "autocorrelacion", "indicador": "I de Moran (contigüidad, estandarizada por filas)",
+                  "variante": f"contexto: {r['variable']}", "ventana": "ambas", "n_ageb": NU, "valor": r["I_obs"],
+                  "p95_nula_perm": r["p95_nula_perm"], "p_perm": r["p_perm"], "z_analitico": r["z_analitico"],
+                  "lectura": "contexto, sin corrección por atenuación"})
+for r in corr.to_dict("records"):
+    filas.append({"bloque": "autocorrelacion", "indicador": "I de Moran por banda de distancia (correlograma)",
+                  "variante": f"banda {r['banda_km']} km · residuos dentro de alcaldía", "ventana": "ambas",
+                  "n_ageb": r["n_ageb"], "valor": r["I_obs"], "valor_corregido": r["I_corr"], "z_analitico": r["z_analitico"],
+                  "lectura": "z analítico (aproximación normal), descriptivo"})
+for w, r in diag_cnt.iterrows():
+    for ind, v in [("AGEB con < 12 carpetas", r.ageb_conteo_bajo), ("AGEB con 0 carpetas", r.ageb_sin_carpetas),
+                   ("fracción de AGEB con conteo bajo", r.pct_ageb_conteo_bajo),
+                   ("fracción de carpetas en AGEB de conteo bajo", r.pct_carpetas_en_conteo_bajo),
+                   ("fracción de llamadas en AGEB de conteo bajo", r.pct_llamadas_en_conteo_bajo),
+                   ("carpetas por AGEB: mediana", r.carpetas_mediana), ("carpetas por AGEB: p90", r.carpetas_p90)]:
+        filas.append({"bloque": "conteos_bajos", "indicador": ind, "variante": "violencia familiar, todos los AGEB",
+                      "ventana": w, "n_ageb": len(ageb), "valor": v,
+                      "lectura": "pocos AGEB concentran las carpetas; el resto no se mide con precisión"})
+filas.append({"bloque": "conteos_bajos", "indicador": "m: mediana en conteo alto vs conteo bajo (log de la brecha)",
+              "variante": f"conteo alto ({int(mask_alto.sum())}) vs conteo bajo ({int((~mask_alto).sum())})", "ventana": "ambas",
+              "n_ageb": NU, "valor": float(np.median(mb)), "valor_corregido": float(np.median(mp)), "p_perm": float(u_mw.pvalue),
+              "lectura": "Mann-Whitney en p_perm: si difieren, el hachurado no es intercambiable con el resto"})
+for gr, r in den.iterrows():
+    for ind, v in [("AGEB en el grupo", r.n_ageb), ("AGEB del grupo dentro del universo del mapa", r.n_en_universo),
+                   ("carpetas 22 meses", r.carpetas_22m), ("fracción de las carpetas", r.pct_carpetas_22m)]:
+        filas.append({"bloque": "denominador", "indicador": ind, "variante": gr, "ventana": "ambas (22 meses)",
+                      "n_ageb": len(ageb), "valor": v,
+                      "lectura": "afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"})
+
+cols15 = ["bloque", "indicador", "variante", "ventana", "n_ageb", "valor", "valor_corregido", "factor_atenuacion",
+          "p95_nula_perm", "p_perm", "p95_nula_homog", "p_homog", "z_analitico", "lectura"]
+o15 = pd.DataFrame(filas).reindex(columns=cols15)
+num15 = o15.select_dtypes("number").columns
+o15[num15] = o15[num15].replace([np.inf, -np.inf], np.nan).round(4)
+assert not o15.duplicated(["bloque", "indicador", "variante", "ventana"]).any() and len(o15) > 40
+o15.to_csv(OUT / "15_diagnostico_ageb.csv", index=False)
+print(o15.shape); display(o15)
+sorted(p.name for p in OUT.glob("*.csv"))
+""")
+
+md(r"""
+### 11.7 Qué deja el 2.5
+
+- **Veredicto, con la regla fijada el 11 de oct en `PLAN_15_OCT.md` §3.4 antes de calcular nada: coexisten las dos estructuras**, con el caso pegado al umbral del gradiente. I observado de los residuos dentro de alcaldía = **0.097** (p = 0.001 contra las dos nulas), corregido por atenuación **0.245** en los 2,294 AGEB y **0.180** en los 698 de conteo alto, donde la corrección es tres veces menor.
+- **La escala es de 1 a 2 km.** El correlograma deja el I corregido en 0.224 (0–1 km) y 0.081 (1–2 km), y en cero de 2 km en adelante. Lo que el mapa mostraba como zonas amplias es **mosaico de barrio**, no un gradiente de escala de alcaldía.
+- **H1 queda intacta y mejor interpretada.** σ²_AGEB/σ²_alcaldía = 4.82 sigue siendo la cifra; el 2.5 dice que esa varianza sub-alcaldía tiene estructura espacial, así que el AGEB es el grano que **permite ver** las zonas, no la unidad en la que ocurre el fenómeno. La frase de la slide 7 se corrige en consecuencia.
+- **Un límite nuevo y duro:** los AGEB de conteo bajo tienen brecha mediana 9% más alta (p = 5×10⁻⁶) y están agrupados en el territorio (I = 0.242), en parte por construcción, porque las carpetas están en el denominador. **No son la periferia** —van de 37% de los AGEB en Cuajimalpa a 82% en Benito Juárez—, así que no se pueden descartar como "la zona rural". El hachurado del mapa no es neutro y hay que decirlo al presentar.
+- **Qué implica para el 2.2 (H2), si entra:** con autocorrelación a 1–2 km, una regresión que trate los AGEB como independientes daría errores estándar demasiado optimistas. Haría falta error espacialmente correlacionado, efectos de vecindad o inferencia por bloques. Queda anotado como requisito del 2.2 y como trabajo futuro.
+- **Salida:** `resultados/15_diagnostico_ageb.csv` (47 filas: 16 de autocorrelación, 15 de conteos bajos y 16 de denominador) y la figura de respaldo `resultados/figuras/2.5_diagnostico_ageb.png`.
 """)
 
 nb = nbf.v4.new_notebook()

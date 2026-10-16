@@ -1,0 +1,48 @@
+bloque,indicador,variante,ventana,n_ageb,valor,valor_corregido,factor_atenuacion,p95_nula_perm,p_perm,p95_nula_homog,p_homog,z_analitico,lectura
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)","universo (2,294 AGEB) · residuos dentro de alcaldía",ambas,2294,0.0969,0.2455,2.5331,0.0211,0.001,0.0184,0.001,7.6335,coexisten las dos estructuras
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)","universo (2,294 AGEB) · m (incluye nivel de alcaldía)",ambas,2294,0.1465,0.3401,2.3219,0.0212,0.001,0.1276,0.005,11.5192,(no decide: incluye el nivel de alcaldía)
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)","universo (2,294 AGEB) · residuos dentro de alcaldía",2019,2294,0.0923,0.2684,2.9083,0.0221,0.001,0.0182,0.001,7.2699,gradiente suave
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)","universo (2,294 AGEB) · m (incluye nivel de alcaldía)",2019,2294,0.1124,0.312,2.7749,0.0213,0.001,0.0669,0.001,8.8506,(no decide: incluye el nivel de alcaldía)
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)","universo (2,294 AGEB) · residuos dentro de alcaldía",2021-22,2294,0.0504,0.2395,4.7481,0.0221,0.001,0.0178,0.001,3.9892,coexisten las dos estructuras
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)","universo (2,294 AGEB) · m (incluye nivel de alcaldía)",2021-22,2294,0.108,0.4123,3.816,0.0223,0.001,0.1045,0.034,8.505,(no decide: incluye el nivel de alcaldía)
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)",conteo alto (>= 12 carpetas) · residuos dentro de alcaldía,ambas,698,0.119,0.1804,1.5154,0.0473,0.001,0.034,0.001,3.6361,coexisten las dos estructuras
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)",conteo alto (>= 12 carpetas) · m (incluye nivel de alcaldía),ambas,698,0.1901,0.2739,1.4412,0.0467,0.001,0.2938,0.9131,5.7802,(no decide: incluye el nivel de alcaldía)
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)",contexto: indicador de conteo bajo (< 12 carpetas en alguna ventana),ambas,2294,0.2417,,,0.0205,0.001,,,18.9859,"contexto, sin corrección por atenuación"
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)",contexto: log(carpetas de las dos ventanas),ambas,2294,0.3644,,,0.0205,0.001,,,28.6095,"contexto, sin corrección por atenuación"
+autocorrelacion,"I de Moran (contigüidad, estandarizada por filas)",contexto: indicador de sensibilidad a S1,ambas,2294,0.0729,,,0.0212,0.001,,,5.7524,"contexto, sin corrección por atenuación"
+autocorrelacion,I de Moran por banda de distancia (correlograma),banda 0–1 km · residuos dentro de alcaldía,ambas,2277,0.0873,0.2237,,,,,,7.9791,"z analítico (aproximación normal), descriptivo"
+autocorrelacion,I de Moran por banda de distancia (correlograma),banda 1–2 km · residuos dentro de alcaldía,ambas,2292,0.0319,0.0809,,,,,,4.993,"z analítico (aproximación normal), descriptivo"
+autocorrelacion,I de Moran por banda de distancia (correlograma),banda 2–4 km · residuos dentro de alcaldía,ambas,2292,-0.0038,-0.0096,,,,,,-0.9814,"z analítico (aproximación normal), descriptivo"
+autocorrelacion,I de Moran por banda de distancia (correlograma),banda 4–8 km · residuos dentro de alcaldía,ambas,2294,-0.007,-0.0176,,,,,,-3.9163,"z analítico (aproximación normal), descriptivo"
+autocorrelacion,I de Moran por banda de distancia (correlograma),banda 8–16 km · residuos dentro de alcaldía,ambas,2294,0.0002,0.0005,,,,,,0.8445,"z analítico (aproximación normal), descriptivo"
+conteos_bajos,AGEB con < 12 carpetas,"violencia familiar, todos los AGEB",2019,2433,1570.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,AGEB con 0 carpetas,"violencia familiar, todos los AGEB",2019,2433,96.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,fracción de AGEB con conteo bajo,"violencia familiar, todos los AGEB",2019,2433,0.6453,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,fracción de carpetas en AGEB de conteo bajo,"violencia familiar, todos los AGEB",2019,2433,0.3416,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,fracción de llamadas en AGEB de conteo bajo,"violencia familiar, todos los AGEB",2019,2433,0.4143,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,carpetas por AGEB: mediana,"violencia familiar, todos los AGEB",2019,2433,9.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,carpetas por AGEB: p90,"violencia familiar, todos los AGEB",2019,2433,22.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,AGEB con < 12 carpetas,"violencia familiar, todos los AGEB",2021-22,2433,1425.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,AGEB con 0 carpetas,"violencia familiar, todos los AGEB",2021-22,2433,75.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,fracción de AGEB con conteo bajo,"violencia familiar, todos los AGEB",2021-22,2433,0.5857,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,fracción de carpetas en AGEB de conteo bajo,"violencia familiar, todos los AGEB",2021-22,2433,0.2748,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,fracción de llamadas en AGEB de conteo bajo,"violencia familiar, todos los AGEB",2021-22,2433,0.3495,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,carpetas por AGEB: mediana,"violencia familiar, todos los AGEB",2021-22,2433,9.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,carpetas por AGEB: p90,"violencia familiar, todos los AGEB",2021-22,2433,24.0,,,,,,,,pocos AGEB concentran las carpetas; el resto no se mide con precisión
+conteos_bajos,m: mediana en conteo alto vs conteo bajo (log de la brecha),conteo alto (698) vs conteo bajo (1596),ambas,2294,-0.0105,0.0892,,,0.0,,,,"Mann-Whitney en p_perm: si difieren, el hachurado no es intercambiable con el resto"
+denominador,AGEB en el grupo,viviendas = 0,ambas (22 meses),2433,20.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB del grupo dentro del universo del mapa,viviendas = 0,ambas (22 meses),2433,15.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,carpetas 22 meses,viviendas = 0,ambas (22 meses),2433,177.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,fracción de las carpetas,viviendas = 0,ambas (22 meses),2433,0.0033,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB en el grupo,dato protegido (*),ambas (22 meses),2433,12.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB del grupo dentro del universo del mapa,dato protegido (*),ambas (22 meses),2433,10.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,carpetas 22 meses,dato protegido (*),ambas (22 meses),2433,79.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,fracción de las carpetas,dato protegido (*),ambas (22 meses),2433,0.0015,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB en el grupo,0 < viviendas < 50,ambas (22 meses),2433,36.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB del grupo dentro del universo del mapa,0 < viviendas < 50,ambas (22 meses),2433,19.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,carpetas 22 meses,0 < viviendas < 50,ambas (22 meses),2433,235.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,fracción de las carpetas,0 < viviendas < 50,ambas (22 meses),2433,0.0044,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB en el grupo,viviendas >= 50 (denominador usable),ambas (22 meses),2433,2365.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,AGEB del grupo dentro del universo del mapa,viviendas >= 50 (denominador usable),ambas (22 meses),2433,2250.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,carpetas 22 meses,viviendas >= 50 (denominador usable),ambas (22 meses),2433,52825.0,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
+denominador,fracción de las carpetas,viviendas >= 50 (denominador usable),ambas (22 meses),2433,0.9908,,,,,,,,"afecta a las tasas por vivienda y a H2 (2.2), no a la brecha"
