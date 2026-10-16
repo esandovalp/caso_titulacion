@@ -243,6 +243,17 @@ Se adoptó la opción (a); detalle completo en `PLAN_15_OCT.md` §3, §3.1 y §3
 
 ---
 
+### Experimento 2.2 — covariables de RESAGEBURB para H2 (16 oct)
+
+`notebooks/build_eda4.py` → `EDA4_h2_covariables.ipynb` → `resultados/12_ageb_covariables_resageburb.csv`. Lee `11_` y **no recalcula la brecha, ni los conteos, ni las clasificaciones**; tampoco mira ninguna asociación entre covariable y brecha (eso es el 3.1, con su regla ya fijada en `PLAN_31_OCT.md` §3).
+
+- **Lectura de la fuente:** el renglón de AGEB es `MZA == "000"` con `AGEB != "0000"` → **2,433 renglones, 2,433 claves únicas**. La clave `ENTIDAD+MUN+LOC+AGEB` une **100%** con la columna `ageb` de `11_` (0 faltantes). El `*` se convirtió a NaN explícitamente, nunca a cero: 10 en `GRAPROES`, 11 en `PDER_SS`, 10 en `PRO_OCUP_C`, 12 en `VIVPAR_HAB`, 0 en `POBTOT`. No hay `N/D`.
+- **Las covariables:** `GRAPROES` tal cual (media 11.60, DE 2.00) · `pct_der_ss` = `PDER_SS`/`POBTOT`, como **proporción** y no conteo, para que no sea un proxy del tamaño del AGEB (media 0.729, DE 0.075) · `PRO_OCUP_C` tal cual (media 0.811, DE 0.211).
+- **Universo:** 2,294 AGEB con ≥ 1 carpeta en cada ventana (reproduce exactamente el de H1), de los cuales **2,250 quedan en el universo de estimación** (98.1%) con **99.10% de las carpetas** (52,572 de 53,050). Las 44 exclusiones de S5: 25 con viviendas 0, 10 con `*` en el denominador, 19 con 1–49 viviendas, 22 con covariable reservada; **ninguna categoría pasa de 0.51% de las carpetas**, así que las exclusiones no deciden el resultado. V1 (conteo alto) queda en **696** AGEB.
+- **Hallazgo que importa — colinealidad severa.** `GRAPROES` y `PRO_OCUP_C` correlacionan **r = −0.93**, con VIF **7.54** y **7.82** (R² de 0.87 contra las otras dos). `pct_der_ss` sí se separa: VIF **1.61** (r = 0.59 con escolaridad y −0.61 con hacinamiento). En la CDMX **escolaridad y hacinamiento son un solo eje medido al revés**, así que H2 no tiene tres predicciones independientes sino **dos ejes**: carencia y derechohabiencia. Esto activó la cláusula que ya estaba escrita en `PLAN_31_OCT.md` §3.4 (fijada esa misma mañana, antes de calcular): **el veredicto se leerá sobre las tres regresiones de una sola covariable**, con la conjunta como referencia. No cambia ningún signo predicho ni reabre H2.
+
+---
+
 ## 5. Conceptos explicados en la conversación (para el usuario)
 
 - **Bootstrap:** remuestrear muchas veces (1,000) para ver cuánto cambia la estimación y sacar un intervalo de confianza.
@@ -295,7 +306,11 @@ Opciones de encuadre discutidas antes de la reunión (referencia):
 
 ## 8. Próximos pasos pendientes
 
-> Plan vigente con fechas: `PLAN_15_OCT.md` (replaneado el 26 sep: semana 1 = 29 sep – 5 oct).
+> **Plan vigente con fechas: `PLAN_31_OCT.md`** (escrito el 16 de oct). `PLAN_15_OCT.md` queda como registro de la revisión de avance; su §3 (alcance, H1–H3, supuestos S1–S7) sigue siendo la referencia y no se reabre.
+
+**Revisión de avance del 15 de oct: hecha.** D1–D3 y el arranque de D4 quedaron calificados y el contenido analítico se aceptó. La crítica fue de forma: *la presentación no tenía estructura* — sin hilo narrativo, sin estructura formal visible y con demasiado método frente a poca conclusión. **Los tres entregables se entregan el 31 de oct** (escrito IEEE, app con demo en vivo, presentación de 15–20 min).
+
+**Lo que queda abierto, en orden:** (a) **H2** — experimento 2.2 (`12_`, covariables de RESAGEBURB) y 3.1 (`16_`, regresión con errores espaciales tipo Conley a 2 km, cinco sensibilidades y placebo espacial); la **regla de decisión quedó fijada el 16 de oct, antes de calcular cualquier coeficiente**, en `PLAN_31_OCT.md` §3, y contempla los tres desenlaces (acepta / rechaza / no concluye) por covariable. (b) **App** (D5): explorador de la brecha y de sus supuestos en D3 + TopoJSON autocontenido, sin red ni API key. (c) **Escrito** IEEE de 5–8 páginas en Typst. (d) **Deck final** de 18 slides con cuatro secciones numeradas. Congelamiento de cifras: **19 de oct**.
 
 1. ~~Investigar AMIS~~ → hecho el 26 sep: solo nivel entidad.
 2. Revisar REPUVE u otras fuentes de robo de vehículo (baja prioridad: el robo de vehículo ya no tiene canal 911).

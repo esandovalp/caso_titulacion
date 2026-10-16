@@ -40,19 +40,19 @@ Escala por dimensión: 4 = 100 (sobresaliente), 3 = 75, 2 = 50, 1 = 25. Califica
 
 ## Calendario
 
-- **15 oct 2026 — revisión de avance ante sinodales** (Morales / Mejía / Román). 10 min de presentación + 5 min de preguntas. Se recuerdan problema, hipótesis y objetivos, y **se califican y revisan fuentes de datos, experimentos y resultados**: es decir, D1–D3 y el arranque de D4. Slides enviados el 14 de oct.
-- **Presentación final** — fecha por confirmar; 15–20 min + 10 min de preguntas, con los tres entregables.
+- ~~15 oct 2026 — revisión de avance ante sinodales~~ (Morales / Mejía / Román). **Hecha.** Se calificaron D1–D3 y el arranque de D4. Crítica de forma: la presentación **no tenía estructura** (sin hilo narrativo, sin estructura formal visible, demasiado método y poca conclusión). El contenido analítico quedó aceptado.
+- **31 oct 2026 — entrega final y presentación.** 15–20 min + 10 min de preguntas, con los **tres entregables el mismo día**: trabajo escrito IEEE, aplicación funcional con demo en vivo y presentación oral. Queda abierto **H2** (D4), la app (D5), el escrito (D8) y el deck nuevo (D6).
 
-Plan de trabajo vigente y estructura del deck: **`PLAN_15_OCT.md`**.
+Plan de trabajo vigente, regla pre-registrada de H2 y estructura del deck final: **`PLAN_31_OCT.md`**. `PLAN_15_OCT.md` queda como registro de la revisión de avance (alcance, hipótesis y supuestos S1–S7 siguen vigentes ahí, §3).
 
 ## Reglas de trabajo (aplican a toda tarea, aunque el prompt no las repita)
 
-1. **Antes de empezar**, lee `CONTEXTO_CONVERSACION.md` y `PLAN_15_OCT.md` (al menos las secciones que el prompt cite). No re-derives cifras ni reabras decisiones que ya estén registradas ahí.
+1. **Antes de empezar**, lee `CONTEXTO_CONVERSACION.md` y `PLAN_31_OCT.md` (y `PLAN_15_OCT.md` §3 para alcance y supuestos; al menos las secciones que el prompt cite). No re-derives cifras ni reabras decisiones que ya estén registradas ahí.
 2. **Verificación ≠ análisis.** Si la tarea es verificar una fuente o un supuesto, trabaja con un script en el scratchpad: no crees notebooks ni CSV en `resultados/`. Los análisis que se quedan van en un `build_*.py` y exportan con la numeración continua, solo cuando la tarea lo pida.
 3. **Redacción ≠ cálculo.** Si la tarea es redactar o decidir, no calcules. Toda cifra sale de datos ejecutados en la sesión o de `CONTEXTO_CONVERSACION.md`. Si falta una, márcala como **[verificar]**; nunca la inventes ni la redondees de memoria.
 4. **Fuentes nuevas:** léelas con `dtype=str` y revisa codificación, fin de línea y BOM antes de confiar en ellas. Valida contra una cifra oficial publicada cuando exista. Anota las trampas en la tabla de "Lectura de las fuentes".
 5. **Cifras de encuesta:** siempre ponderadas, con IC 95%, CV (sobre la tasa pequeña) y el **n muestral y el número de casos del numerador**.
-6. **Al cerrar:** actualiza `CONTEXTO_CONVERSACION.md` (inventario §2, hallazgos §4, próximos pasos §8) y `PLAN_15_OCT.md` (estado de la tarea y riesgos). Termina con un resumen: veredicto o decisión, cifras clave con su incertidumbre, supuestos nuevos y qué cambia para la siguiente decisión del calendario.
+6. **Al cerrar:** actualiza `CONTEXTO_CONVERSACION.md` (inventario §2, hallazgos §4, próximos pasos §8) y `PLAN_31_OCT.md` (estado de la tarea y riesgos). Termina con un resumen: veredicto o decisión, cifras clave con su incertidumbre, supuestos nuevos y qué cambia para la siguiente decisión del calendario.
 
 ## Comandos
 
@@ -64,6 +64,8 @@ uv run python notebooks/build_eda2.py          # tarea 1.2 + experimentos 2.1, 2
 uv run jupyter nbconvert --to notebook --execute --inplace notebooks/EDA2_equivalencias_911_fgj.ipynb
 uv run python notebooks/build_eda3.py          # experimento 2.4: H3 y calibradores (~1 min al ejecutar)
 uv run jupyter nbconvert --to notebook --execute --inplace notebooks/EDA3_validacion_calibracion.ipynb
+uv run python notebooks/build_eda4.py          # H2: experimento 2.2 (covariables) y 3.1 (regresión espacial)
+uv run jupyter nbconvert --to notebook --execute --inplace notebooks/EDA4_h2_covariables.ipynb
 ```
 
 Los tres pares de comandos se ejecutan desde la raíz. La ejecución completa tarda varios minutos (bootstrap de 1,000 réplicas + uniones espaciales sobre 2.1 M filas).
@@ -83,6 +85,8 @@ notebooks/build_eda.py  →  notebooks/EDA_encuadre1.ipynb  →  resultados/*.cs
 El notebook mantiene estado entre secciones (`fgj`, `ageb`, `alc`/`alc2`/`alc3`, `cmp`, `ag`, `tab_alc`, `covs`), así que las celdas no son independientes y el orden importa. La sección 10 exporta los ocho CSV (`01_`–`08_`) a `resultados/` a partir de esas variables; agregar una tabla implica agregarla ahí también.
 
 `build_eda2.py` → `EDA2_equivalencias_911_fgj.ipynb` sigue el mismo patrón y exporta `09_` y `10_` (tabla de equivalencias 911 ↔ FGJ en la ventana común 2019 + jul-2021 → abr-2022). La sección 8 (experimento 2.1) exporta `11_ageb_brecha_por_delito.csv`; la 9 (experimento 2.3) `13_variacion_brecha_ageb_vs_alcaldia.csv`; la 10 (experimento 2.6) las figuras de `resultados/figuras/`.
+
+`build_eda4.py` → `EDA4_h2_covariables.ipynb` es el cuarto script y soporta **H2**: el experimento 2.2 (covariables de RESAGEBURB, `12_`) en las secciones 1–5 y el 3.1 (regresión con errores espaciales, `16_`) en las siguientes. Lee `11_`, `13_` y `15_` y **no recalcula la brecha, los conteos ni las clasificaciones**. Las dos mitades están separadas a propósito: en las secciones 1–5 **no se mira ninguna asociación entre covariable y brecha**, porque la regla de decisión de H2 se fijó el 16 de oct (`PLAN_31_OCT.md` §3) antes de calcularla.
 
 `build_eda3.py` → `EDA3_validacion_calibracion.ipynb` (experimento 2.4) es el tercer script, separado porque trae fuentes nuevas (ENDIREH, ENSU, ENVIPE) y no equivalencias 911 ↔ FGJ. **Lee `resultados/11_` y no recalcula la brecha, los grupos ni los conteos**; exporta `14_validacion_caso_calibracion.csv`. Los experimentos siguientes continúan la numeración en `15_` (`12_` quedó reservado para las covariables de RESAGEBURB del 2.2).
 
@@ -105,7 +109,7 @@ Estructura del notebook: 1 inventario · 2 ENVIPE (2.1 bootstrap Rao-Wu) · 3 FG
 | ENSU | Abrir el `ensu_cb_*.csv` dentro del zip con `io.BytesIO`; filtrar `CVE_ENT == "09"` | `NOM_CD` es la alcaldía. En CDMX `BP1_8_1` (policía municipal) siempre es "no aplica": usar `BP1_8_2` (SSC). |
 | Llamadas 911 | `engine="pyarrow"` + `pd.to_datetime(fecha_creacion)` antes de filtrar | Hay 2019 S1, 2019 S2, 2021 S2 y 2022 S1 (este último solo **ene–abr 2022**). **El C5 no publica nada después de abr-2022.** Todos los archivos traen registros fuera de su semestre: filtrar siempre por ventana. Delitos: `clas_con_f_alarma == "DELITO"`. |
 | Censo 2020 AGEB | Descomprimir el zip a temporal y `gpd.read_file("total.shp")` | EPSG:4326, 2,433 AGEB; la clave AGEB es la columna `ageb`. Este shapefile **solo** trae migración, lengua indígena, afromexicanos, situación conyugal y religión: escolaridad y hacinamiento vienen de RESAGEBURB. 17 AGEB con población 0. **2 AGEB (`0901101101107`, `0901201351227`) no tienen polígono ni `alc`**: completar la alcaldía con la clave municipal (`ageb[2:5]`) y sacarlos de cualquier operación geométrica (no reciben eventos). |
-| RESAGEBURB 2020 | CSV dentro de `AGEB/ageb_mza_urbana_09_cpv2020_csv.zip`, `dtype=str`, `encoding="utf-8-sig"` | Mezcla manzanas y totales: AGEB = `MZA == "000"` y `AGEB != "0000"`. Clave `ENTIDAD+MUN+LOC+AGEB` = `ageb` del shapefile (une 100%). `*` = dato protegido por confidencialidad, no cero. `VIVPAR_HAB`: 12 AGEB con `*`, 20 con 0 y 56 con < 50 (tasas por vivienda absurdas). |
+| RESAGEBURB 2020 | CSV dentro de `AGEB/ageb_mza_urbana_09_cpv2020_csv.zip`, `dtype=str`, `encoding="utf-8-sig"` | Mezcla manzanas y totales: AGEB = `MZA == "000"` y `AGEB != "0000"` (2,433 renglones). Clave `ENTIDAD+MUN+LOC+AGEB` = `ageb` del shapefile (une 100%). `*` = dato protegido por confidencialidad, no cero (10–12 AGEB según la variable). `VIVPAR_HAB`: 12 AGEB con `*`, 20 con 0 y 56 con < 50 (tasas por vivienda absurdas). **`PDER_SS` es un conteo de personas, no un porcentaje**: hay que dividirlo entre `POBTOT` o la covariable termina siendo un proxy del tamaño del AGEB. **Escolaridad y hacinamiento son casi el mismo eje**: `GRAPROES` ↔ `PRO_OCUP_C` da r = −0.93 (VIF 7.5 y 7.8), así que no admiten lectura separada en una regresión conjunta. |
 | ENDIREH 2021 | Microdatos `ENDIREH/bd_endireh_2021_csv.zip`: `pd.read_csv(io.BytesIO(...), dtype=str, encoding="latin-1")` + `.str.strip()`; unir tablas por `ID_PER` | Microdatos en latin-1, CRLF, sin BOM; datos abiertos en latin-1 con **solo CR** (`lineterminator="\r"`). Catálogos con CR **dentro** de las comillas (`"1\r"`). Diseño: `FAC_MUJ`/`EST_DIS`/`UPM_DIS`; INEGI no publica réplicas. Usar `TB_VD` (`VFAM`, `VPAR_12M`) para condición de violencia. Denuncia familia = `P11_6_2` (12 m); pareja = `P14_7_2` (toda la relación; `9` = no especificado; años `P14_15_*`, `8888` = no sabe). Solo mujeres 15+ y solo nivel entidad (CDMX: 3,267 mujeres, 3 estratos con 2–3 UPM). El PDF `889463905936` es de la ENCIG, no de la ENDIREH. |
 | Víctimas FGJ | `carpetas-datos/victimasFGJ_{2020,2021}.csv`, `engine="pyarrow"` | Trae `sexo` y `edad` (14.6% faltante en violencia familiar), pero **no** folio de carpeta ni parentesco: cuenta víctimas, no carpetas, y no separa pareja de familia. Hay víctimas `MORAL` en violencia familiar (error de captura). |
 
@@ -116,7 +120,3 @@ AMIS solo publica a nivel entidad (verificado el 26 sep), así que no sirve a gr
 Los sinodales pidieron explícitamente lenguaje de **incertidumbre**: "aproximar/acotar el subregistro con indicadores indirectos", nunca "estimarlo". Con n = 16 alcaldías se necesita |ρ| ≥ 0.50 para p < 0.05 y no hay grados de libertad para más de 1–2 covariables; cualquier hallazgo a ese grano debe presentarse con esa cautela, junto con las diferencias de universo entre fuentes (ENVIPE excluye homicidio, narcomenudeo y delitos contra negocios; FGJ cuenta carpetas, no víctimas) y el riesgo de falacia ecológica al usar covariables de AGEB.
 
 Cada afirmación analítica se acompaña de su supuesto en el formato del criterio transversal (*por qué es válido aquí*, no *qué se hizo*), porque sin eso ninguna dimensión puede llegar a 4.
-
-## Entorno
-
-Hay un hook **GateGuard** que, antes del primer comando Bash de cada turno, exige declarar la petición del usuario y qué produce el comando. Presenta esos dos hechos y reintenta el mismo comando.
