@@ -1,0 +1,28 @@
+especificacion,covariable,signo_predicho,beta,se_espacial,ic95_inf,ic95_sup,t,razon_multiplicativa,r2_parcial,metodo_ic,n_obs,n_ageb,prop_signo_predicho,t_abs_observado,p95_nula_t_abs,p_perm,supera_p95_nula,cond_a_signo,cond_b_ic,cond_c_sensibilidades,signos_sensibilidades,placebo_supera_p95,placebo_p,veredicto,motivo
+primaria simple,GRAPROES,-1,-0.041,0.0191,-0.0784,-0.0035,-2.1443,0.9599,0.0037,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+primaria simple,pct_der_ss,-1,-0.0393,0.0172,-0.0731,-0.0056,-2.283,0.9614,0.0034,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+primaria simple,PRO_OCUP_C,1,0.0302,0.0177,-0.0046,0.0649,1.7025,1.0306,0.002,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+primaria conjunta (referencia),GRAPROES,-1,-0.0927,0.0416,-0.1743,-0.0111,-2.2275,0.9115,0.0025,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+primaria conjunta (referencia),pct_der_ss,-1,-0.0309,0.0189,-0.0679,0.0062,-1.6336,0.9696,0.0014,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+primaria conjunta (referencia),PRO_OCUP_C,1,-0.0752,0.0391,-0.1518,0.0014,-1.9243,0.9276,0.0016,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V1 conteo alto,GRAPROES,-1,-0.0614,0.03,-0.1202,-0.0027,-2.0506,0.9404,0.0067,Conley Bartlett 2 km + AGEB,1392,696,,,,,,,,,,,,,
+V1 conteo alto,pct_der_ss,-1,-0.0452,0.0236,-0.0916,0.0011,-1.9146,0.9558,0.0054,Conley Bartlett 2 km + AGEB,1392,696,,,,,,,,,,,,,
+V1 conteo alto,PRO_OCUP_C,1,0.0328,0.0278,-0.0218,0.0873,1.1777,1.0333,0.002,Conley Bartlett 2 km + AGEB,1392,696,,,,,,,,,,,,,
+V2 S1 19% descontado,GRAPROES,-1,-0.1897,0.0219,-0.2326,-0.1468,-8.6676,0.8272,0.0433,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V2 S1 19% descontado,pct_der_ss,-1,-0.112,0.0218,-0.1548,-0.0693,-5.1342,0.894,0.0153,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V2 S1 19% descontado,PRO_OCUP_C,1,0.1701,0.0206,0.1296,0.2105,8.2474,1.1854,0.0346,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V3 EF de alcaldia,GRAPROES,-1,-0.0482,0.0176,-0.0827,-0.0136,-2.7332,0.953,0.0034,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V3 EF de alcaldia,pct_der_ss,-1,0.0018,0.0159,-0.0294,0.0331,0.1154,1.0018,0.0,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V3 EF de alcaldia,PRO_OCUP_C,1,0.0313,0.0157,0.0005,0.062,1.9927,1.0318,0.0016,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V4 MCO sin pesos,GRAPROES,-1,-0.0731,0.0218,-0.1157,-0.0304,-3.3565,0.9295,0.0091,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V4 MCO sin pesos,pct_der_ss,-1,-0.0604,0.0206,-0.1007,-0.0201,-2.9354,0.9414,0.0062,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V4 MCO sin pesos,PRO_OCUP_C,1,0.0624,0.0204,0.0224,0.1024,3.0542,1.0644,0.0067,Conley Bartlett 2 km + AGEB,4500,2250,,,,,,,,,,,,,
+V5 bootstrap por bloques,GRAPROES,-1,-0.0416,0.0251,-0.0871,0.0104,-1.6568,0.9592,,"percentil bootstrap por bloques (1000 replicas, semilla 2026)",4500,2250,0.94,,,,,,,,,,,,
+V5 bootstrap por bloques,pct_der_ss,-1,-0.0384,0.0211,-0.0776,0.0034,-1.8146,0.9624,,"percentil bootstrap por bloques (1000 replicas, semilla 2026)",4500,2250,0.963,,,,,,,,,,,,
+V5 bootstrap por bloques,PRO_OCUP_C,1,0.0299,0.0245,-0.0209,0.0752,1.2182,1.0303,,"percentil bootstrap por bloques (1000 replicas, semilla 2026)",4500,2250,0.874,,,,,,,,,,,,
+P placebo espacial,GRAPROES,-1,,,,,-2.1443,,,"permutacion dentro de alcaldia (1000 replicas, semilla 2026)",4500,2250,,2.1443,1.7971,0.011,True,,,,,,,,
+P placebo espacial,pct_der_ss,-1,,,,,-2.283,,,"permutacion dentro de alcaldia (1000 replicas, semilla 2026)",4500,2250,,2.283,3.9307,0.7602,False,,,,,,,,
+P placebo espacial,PRO_OCUP_C,1,,,,,1.7025,,,"permutacion dentro de alcaldia (1000 replicas, semilla 2026)",4500,2250,,1.7025,1.7045,0.0529,False,,,,,,,,
+VEREDICTO,GRAPROES,-1,-0.041,,-0.0784,-0.0035,,0.9599,0.0037,"regla PLAN_31_OCT.md 3.4, fijada el 16 oct 2026",4500,2250,,,,,,True,True,True,-----,True,0.011,acepta,(a) signo + (b) IC excluye el cero + (c) signo estable en las cinco sensibilidades
+VEREDICTO,pct_der_ss,-1,-0.0393,,-0.0731,-0.0056,,0.9614,0.0034,"regla PLAN_31_OCT.md 3.4, fijada el 16 oct 2026",4500,2250,,,,,,True,True,False,--+--,False,0.7602,no concluye,(c) el signo cambia entre sensibilidades
+VEREDICTO,PRO_OCUP_C,1,0.0302,,-0.0046,0.0649,,1.0306,0.002,"regla PLAN_31_OCT.md 3.4, fijada el 16 oct 2026",4500,2250,,,,,,True,False,True,+++++,False,0.0529,no concluye,(b) el IC primario incluye el cero
