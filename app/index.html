@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explorador de la brecha — violencia familiar, CDMX</title>
+
+<style>
+/* Los colores se reescriben desde meta.paleta.tokens al cargar (app.js §1).
+   Lo de aquí es el valor de primer pintado, no una segunda fuente de verdad. */
+:root{
+  --tinta:#1a1a19; --tinta2:#56544f; --gris:#d9d7d2; --fondo:#ffffff;
+  --azul:#0d366b; --rojo:#8f2322; --neutro:#f0efec;
+  --linea:#e6e4df;
+  --tipo:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  /* REPARTO DEL ALTO (tarea 4.5). El orden es explícito: el cuerpo —mapa y
+     columna lateral— se queda con su mínimo legible antes que nadie; el
+     encabezado, los controles y el pie se comprimen a su versión corta en
+     pantallas bajas; y si aun así no cabe, la página hace scroll en vez de
+     recortar o encimar. Antes de esto el pie le robaba el alto al mapa: a
+     998x778 el cuerpo quedaba en 236 px y la leyenda, que mide 418, se
+     dibujaba 196 px por fuera, encima del pie. El mínimo es el que la columna
+     lateral necesita (nube en su alto mínimo + la franja del detalle), que es
+     mayor que el del mapa, así que es el que manda. */
+  --cuerpo-min:400px;
+}
+*{box-sizing:border-box}
+html{height:100%}
+body{
+  margin:0; background:var(--fondo); color:var(--tinta);
+  font-family:var(--tipo); font-size:15px; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; height:100%;
+}
+/* `height` y no `min-height`: con el alto del cuerpo indefinido, flexbox deja
+   de repartir y cada sección pide lo que mide, así que la página hacía scroll
+   siempre. Con el alto fijo a la ventana sí se reparte, los mínimos de arriba
+   mandan, y lo que no cabe desborda hacia abajo — que es el scroll que se
+   quiere: el que aparece solo cuando el mínimo legible ya no entra. */
+
+/* ---------- encabezado: titular = conclusión ---------- */
+.encabezado{padding:22px 28px 14px; border-bottom:1px solid var(--linea); flex:0 0 auto}
+.volanta{
+  font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--tinta2); font-weight:600; margin:0 0 6px;
+}
+.encabezado h1{
+  margin:0; font-size:27px; line-height:1.18; font-weight:700;
+  letter-spacing:-.015em; max-width:34em;
+}
+.sub{margin:7px 0 0; color:var(--tinta2); font-size:14px; max-width:60em}
+.anotacion{margin:9px 0 0; font-size:13.5px; color:var(--tinta)}
+.anotacion b{font-weight:700}
+
+/* ---------- controles de supuestos (4.3) ----------
+   Los botones se generan en app.js desde `meta`: aquí no hay ni una etiqueta
+   con cifra. Lo que vive en esta hoja es la forma, no el contenido. */
+.controles{
+  flex:0 0 auto; display:flex; flex-wrap:wrap; gap:12px 34px;
+  align-items:flex-start; justify-content:space-between;
+  padding:11px 28px 12px; border-bottom:1px solid var(--linea);
+}
+#mandos{display:flex; flex-wrap:wrap; gap:12px 24px}
+.ctrl .c-rotulo{
+  font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--tinta2); font-weight:600; margin:0 0 5px;
+}
+.ctrl .c-rotulo .c-n{letter-spacing:0; font-variant-numeric:tabular-nums}
+.ctrl .c-rotulo kbd{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:0; border:1px solid var(--gris);
+  border-radius:3px; padding:0 3px; background:var(--neutro); color:var(--tinta2);
+}
+.seg{display:inline-flex; border:1px solid var(--gris); border-radius:5px; overflow:hidden}
+.seg button{
+  font:inherit; font-size:12.5px; line-height:1.65; padding:2px 11px;
+  border:0; border-left:1px solid var(--gris); background:var(--fondo);
+  color:var(--tinta2); cursor:pointer; white-space:nowrap;
+}
+.seg button:first-child{border-left:0}
+.seg button:hover{background:var(--neutro); color:var(--tinta)}
+.seg button[aria-pressed="true"]{background:var(--tinta); color:var(--fondo); font-weight:600}
+.seg button:focus-visible{outline:2px solid var(--tinta2); outline-offset:-2px}
+.lectura{flex:1 1 290px; max-width:46em; align-self:center}
+.lectura .sensibilidad{margin:0; font-size:13.5px}
+.lectura .sensibilidad b{font-weight:700}
+.lectura .supuesto{margin:3px 0 0; font-size:11.5px; color:var(--tinta2)}
+
+/* ---------- cuerpo ---------- */
+main{flex:1 1 auto; display:flex; min-height:var(--cuerpo-min)}
+.mapa-caja{flex:1 1 auto; position:relative; min-width:0; min-height:0; background:var(--fondo)}
+#mapa-cont{position:absolute; inset:0}
+#lienzo{position:absolute; inset:0; width:100%; height:100%; display:block}
+#capa{position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; touch-action:none}
+#escala{position:absolute; top:10px; right:16px; pointer-events:none}
+/* El ancho máximo le deja libre la banda de la leyenda (150 px + 16 de
+   margen): con el mapa bajo, la última clave de la leyenda caía justo encima
+   de este renglón y el fondo semitransparente se la comía. */
+.ayuda{
+  position:absolute; left:16px; bottom:12px; font-size:12px; color:var(--tinta2);
+  background:color-mix(in srgb, var(--fondo) 88%, transparent); padding:3px 0;
+  max-width:calc(100% - 190px);
+}
+.ayuda kbd{
+  font-family:var(--mono); font-size:11px; border:1px solid var(--gris);
+  border-radius:3px; padding:0 4px; background:var(--neutro); color:var(--tinta);
+}
+#reset{
+  position:absolute; right:16px; bottom:12px; font:inherit; font-size:12px;
+  color:var(--tinta2); background:var(--fondo); border:1px solid var(--gris);
+  border-radius:4px; padding:3px 9px; cursor:pointer;
+}
+#reset:hover{color:var(--tinta); border-color:var(--tinta2)}
+#reset[hidden]{display:none}
+
+/* ---------- tooltip ---------- */
+#tip{
+  position:absolute; pointer-events:none; opacity:0; transition:opacity .08s;
+  background:var(--tinta); color:var(--fondo); border-radius:5px;
+  padding:7px 10px; font-size:12.5px; line-height:1.35; max-width:270px;
+  box-shadow:0 2px 10px rgba(0,0,0,.18); z-index:5;
+}
+#tip .t-clave{font-family:var(--mono); font-size:11px; opacity:.72; letter-spacing:.02em}
+#tip .t-val{font-size:18px; font-weight:700; margin:2px 0 1px; letter-spacing:-.01em}
+#tip .t-glosa{opacity:.82}
+#tip .t-pie{opacity:.6; font-size:11.5px; margin-top:4px}
+
+/* ---------- columna lateral: dispersión (4.4) arriba, detalle abajo ----------
+   La dispersión es de alto fijo y el detalle es el que hace scroll: así la nube
+   y la recta de H2 no se van de pantalla al leer un AGEB largo. */
+#lado{
+  flex:0 0 372px; border-left:1px solid var(--linea); background:var(--fondo);
+  display:flex; flex-direction:column; min-height:0; overflow:hidden;
+}
+#dispersion{flex:0 0 auto; padding:13px 18px 9px; border-bottom:1px solid var(--linea)}
+.d-cab{display:flex; align-items:baseline; justify-content:space-between; gap:8px 12px; flex-wrap:wrap}
+.d-cab .rotulo{margin:0; border-top:0; padding-top:0}
+.d-cab .rotulo kbd{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:0; border:1px solid var(--gris);
+  border-radius:3px; padding:0 3px; background:var(--neutro); color:var(--tinta2);
+}
+.d-pie kbd{font-family:var(--mono); font-size:9.5px; opacity:.8}
+#disp-tabs button{font-size:11.5px; padding:1px 7px}
+.d-sub{margin:7px 0 0; font-size:12px; color:var(--tinta2); line-height:1.4}
+.d-sub b{color:var(--tinta); font-weight:700}
+.d-caja{position:relative; margin:5px 0 0}
+#disp-lienzo{display:block; width:100%}
+#disp-capa{position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; touch-action:none}
+#disp-capa .selection{fill:var(--tinta); fill-opacity:.07; stroke:var(--tinta); stroke-width:1; stroke-dasharray:3 2}
+#disp-capa .handle{fill:none}
+#disp-tip{
+  position:absolute; pointer-events:none; opacity:0; transition:opacity .08s;
+  background:var(--tinta); color:var(--fondo); border-radius:4px; padding:5px 8px;
+  font-size:11.5px; line-height:1.3; max-width:210px; z-index:6;
+}
+#disp-tip .t-clave{font-family:var(--mono); font-size:10px; opacity:.72}
+.d-pie{margin:5px 0 0; font-size:11px; color:var(--tinta2); line-height:1.45}
+.d-pie b{color:var(--tinta); font-weight:700}
+.d-pie button{
+  font:inherit; font-size:11px; color:var(--tinta2); background:var(--fondo);
+  border:1px solid var(--gris); border-radius:4px; padding:0 6px; cursor:pointer; margin-left:4px;
+}
+.d-pie button:hover{color:var(--tinta); border-color:var(--tinta2)}
+.d-pie button[hidden]{display:none}
+
+/* ---------- panel de detalle ---------- */
+#detalle{
+  flex:1 1 auto; min-height:0; padding:16px 18px 26px;
+  overflow-y:auto; background:var(--fondo);
+}
+#detalle h2{
+  margin:0; font-size:17px; font-weight:700; letter-spacing:-.01em;
+}
+#detalle .clave{font-family:var(--mono); font-size:12px; color:var(--tinta2); margin:2px 0 0}
+.vacio{color:var(--tinta2); font-size:13.5px}
+.vacio p{margin:0 0 10px}
+
+.cifra-grande{font-size:38px; font-weight:700; letter-spacing:-.03em; line-height:1; margin:16px 0 2px}
+.cifra-glosa{font-size:12.5px; color:var(--tinta2); margin:0 0 2px}
+
+.marcas{display:flex; flex-wrap:wrap; gap:5px; margin:12px 0 0}
+.chip{
+  font-size:11px; border:1px solid var(--gris); border-radius:999px;
+  padding:1px 8px; color:var(--tinta2); white-space:nowrap;
+}
+.chip.alta{border-color:var(--rojo); color:var(--rojo)}
+.chip.baja{border-color:var(--azul); color:var(--azul)}
+.chip.aviso{background:var(--neutro)}
+
+.rotulo{
+  font-size:10.5px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--tinta2); font-weight:600; margin:22px 0 8px;
+  border-top:1px solid var(--linea); padding-top:9px;
+}
+.ventana{margin:0 0 16px}
+/* La ventana que el mapa está pintando se marca en el panel: así el detalle no
+   se lee por separado del control de arriba. */
+.ventana.activa{border-left:2px solid var(--tinta); padding-left:9px; margin-left:-11px}
+.ventana.activa .v-nom{color:var(--tinta); font-weight:600}
+.ventana .v-nom{font-size:12.5px; color:var(--tinta2); margin:0}
+.ventana .v-cuenta{font-size:13.5px; margin:1px 0 0}
+.ventana .v-cuenta b{font-weight:700}
+.ventana .v-s1{font-size:12px; color:var(--tinta2); margin:3px 0 0}
+.ventana svg{display:block; margin:5px 0 0}
+
+table.ctx{width:100%; border-collapse:collapse; font-size:13px}
+table.ctx td{padding:3px 0; vertical-align:baseline}
+table.ctx td:first-child{color:var(--tinta2)}
+table.ctx td:last-child{text-align:right; font-variant-numeric:tabular-nums}
+.nota{font-size:11.5px; color:var(--tinta2); margin:8px 0 0}
+.nota-eje{margin:-4px 0 10px}
+
+/* ---------- pie: qué NO se puede concluir ---------- */
+footer{
+  flex:0 0 auto; border-top:1px solid var(--linea); padding:12px 28px 14px;
+  font-size:12px; color:var(--tinta2); line-height:1.5;
+}
+.pie-cols{display:flex; gap:8px 32px; flex-wrap:wrap; align-items:flex-start}
+.pie-limites{flex:1 1 430px; min-width:0}
+/* La columna del nivel debe pedir lo que mide su SVG (318 px de ancho), no lo
+   que mediría su prosa en un solo renglón: con `flex:0 0 auto` el párrafo del
+   IC exigía su max-content —1251 px, medidos en el navegador el 26 de oct— y
+   eso rompía el pie a una sola columna, que de rebote le robaba el alto al
+   mapa y al panel de detalle. El tope hace que la prosa envuelva. */
+.pie-nivel{flex:0 1 340px; max-width:340px; min-width:0}
+.pie-rot{
+  font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--tinta2); font-weight:600; margin:0 0 5px;
+}
+footer ul{margin:0; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:3px 26px}
+footer li{max-width:40em}
+footer li b{color:var(--tinta); font-weight:600}
+footer .fuente{margin:8px 0 0; opacity:.85}
+#endireh svg{display:block}
+
+#error{padding:40px 28px; max-width:46em}
+#error code{font-family:var(--mono); background:var(--neutro); padding:1px 5px; border-radius:3px}
+
+/* ---------- pantallas bajas: se comprime la orilla, no el cuerpo ----------
+   Las dos escalas son de ALTO, no de ancho, porque lo que falta en un
+   proyector es alto. Lo que se toca son márgenes y el cuerpo de los titulares;
+   ninguna frase desaparece y ninguna cifra cambia de sitio. Medido con el
+   arnés del 4.5: el costo fijo (encabezado + controles + pie) baja de 542 px
+   a 377 px a 1024 de ancho, que es lo que le devuelve el alto al mapa. */
+@media (max-height:880px){
+  .encabezado{padding:11px 28px 8px}
+  .encabezado h1{font-size:21px}
+  .sub{margin-top:5px; font-size:13px}
+  .anotacion{font-size:12.5px; margin-top:6px}
+  .controles{padding:6px 28px 7px; gap:7px 24px}
+  .lectura .supuesto{font-size:11px}
+  footer{padding:6px 28px 5px; font-size:11px; line-height:1.42}
+  footer .fuente{font-size:10.5px; margin-top:2px}
+  .pie-rot{margin-bottom:2px}
+  .d-sub{margin-top:5px; font-size:11.5px}
+  .d-pie{font-size:10.5px}
+  /* Con la orilla comprimida el cuerpo puede bajar su mínimo: 385 px es lo que
+     mide la leyenda con la rampa corta y la clave del filtro de conteo puesta
+     (96 + 259 + 18, con 10 px de margen arriba y 8 abajo), que es el más alto
+     de los dos mínimos: el de la columna lateral es 368. */
+  :root{--cuerpo-min:373px}
+}
+
+/* ---------- ancho de teléfono o ventana angosta ----------
+   Aquí el cuerpo deja de repartirse: el mapa toma una fracción de la ventana,
+   la columna lateral se pone debajo en flujo normal y es la página la que hace
+   scroll. Por eso se quita el mínimo del cuerpo y el recorte de la columna. */
+@media (max-width:900px){
+  .controles{padding:10px 16px 11px; gap:10px 18px}
+  .encabezado{padding:16px 16px 12px}
+  footer{padding:10px 16px 14px}
+  main{flex-direction:column; min-height:auto}
+  .mapa-caja{flex:0 0 auto; height:62vh; min-height:340px}
+  #lado{flex:0 0 auto; border-left:0; border-top:1px solid var(--linea); overflow:visible}
+  #detalle{overflow:visible}
+  .pie-nivel{flex:1 1 300px; max-width:none}
+}
+</style>
+</head>
+
+<body>
+
+<header class="encabezado">
+  <p class="volanta">Subregistro delictivo en la CDMX · violencia familiar</p>
+  <h1 id="titular">Dentro de una misma alcaldía, la denuncia cambia de AGEB en AGEB</h1>
+  <p class="sub" id="subtitular"></p>
+  <p class="anotacion" id="anotacion"></p>
+</header>
+
+<!-- Controles de supuestos (tarea 4.3). Los grupos de botones, sus etiquetas y
+     los conteos los construye app.js §9 desde el bloque `meta` de brecha.json. -->
+<section class="controles">
+  <div id="mandos"></div>
+  <div class="lectura">
+    <p class="sensibilidad" id="sensibilidad"></p>
+    <p class="supuesto" id="supuesto-ctrl"></p>
+  </div>
+</section>
+
+<main>
+  <section class="mapa-caja">
+    <div id="mapa-cont">
+      <canvas id="lienzo"></canvas>
+      <svg id="capa"></svg>
+      <div id="escala"></div>
+      <div id="tip"></div>
+      <p class="ayuda">Rueda para acercar · clic para fijar un AGEB · <kbd>Esc</kbd> para soltar ·
+        <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> ventana · <kbd>S</kbd> supuesto S1 · <kbd>C</kbd> conteo bajo ·
+        <kbd>X</kbd> covariable · <kbd>B</kbd> soltar el pincel</p>
+      <button id="reset" hidden>Volver a la vista completa</button>
+    </div>
+  </section>
+
+  <!-- Dispersión ligada y detalle (tarea 4.4). Los ejes, la recta de H2, las
+       pestañas y todas las cifras los construye app.js §11 desde `meta`. -->
+  <aside id="lado">
+    <section id="dispersion">
+      <div class="d-cab">
+        <p class="rotulo" id="disp-rotulo"></p>
+        <div class="seg" id="disp-tabs" role="group" aria-label="Covariable de H2"></div>
+      </div>
+      <p class="d-sub" id="disp-sub"></p>
+      <div class="d-caja" id="disp-caja">
+        <canvas id="disp-lienzo"></canvas>
+        <svg id="disp-capa"></svg>
+        <div id="disp-tip"></div>
+      </div>
+      <p class="d-pie" id="disp-pie"></p>
+    </section>
+    <div id="detalle"></div>
+  </aside>
+</main>
+
+<footer>
+  <div class="pie-cols">
+    <div class="pie-limites">
+      <p class="pie-rot">Lo que este mapa no dice</p>
+      <ul id="limites"></ul>
+    </div>
+    <div class="pie-nivel">
+      <p class="pie-rot" id="nivel-rot"></p>
+      <div id="endireh"></div>
+    </div>
+  </div>
+  <p class="fuente" id="fuente"></p>
+</footer>
+
+<script src="vendor/d3.v7.9.0.min.js"></script>
+<!-- Paquete para abrir con doble clic (file://), donde fetch() está bloqueado.
+     Lo genera app/build_bundle.py a partir de los dos JSON; si no existe,
+     app.js cae a fetch() y la app funciona igual servida por HTTP. -->
+<script src="data/bundle.js" onerror="window.__SIN_PAQUETE__=true"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
