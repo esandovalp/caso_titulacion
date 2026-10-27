@@ -45,12 +45,13 @@
 La política de prevención del delito en la Ciudad de México se reparte con un
 número. La Ley del Sistema de Seguridad Ciudadana encarga al Sistema "dar
 seguimiento a la incidencia delictiva y tomar decisiones respecto de las acciones
-correctivas y preventivas" @leyssc, y la incidencia delictiva del fuero común, en
-la definición que usa el país, son las carpetas de investigación iniciadas
-@sesnsp. El ejemplo operativo más visible de esa cadena es la estrategia de
-cuadrantes: 126 de los 847 cuadrantes de la ciudad se declaran prioritarios por
-concentrar alrededor del 40% de la incidencia registrada @cuadrantes
-#text(fill: rgb("#b00020"))[\[verificar: acuerdo o boletín puntual de la SSC\]].
+correctivas y preventivas en materia de seguridad en la Ciudad" @leyssc, y la
+incidencia delictiva del fuero común, en la definición que usa el país, son los
+delitos registrados en carpetas de investigación iniciadas @sesnsp. El ejemplo operativo más visible de esa cadena es la estrategia de
+cuadrantes: en septiembre de 2021 la Secretaría de Seguridad Ciudadana declaró
+prioritarios 126 de los 847 cuadrantes de la ciudad, repartidos en siete
+alcaldías, por concentrar —según la propia Secretaría— alrededor del 40% de la
+incidencia delictiva @cuadrantes.
 
 Una carpeta existe solo si alguien denunció. En la Ciudad de México, el 93.5% de
 los delitos ocurridos en 2024 no derivó en carpeta (IC 95%: 92.3–
