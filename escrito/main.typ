@@ -19,7 +19,8 @@
     violencia familiar y 0.46 en el par de control), así que no es ruido. Tercero,
     de las tres asociaciones con covariables del territorio que se preregistraron,
     una se sostiene —una desviación estándar más de escolaridad se
-    asocia con una brecha 4% menor— y dos no concluyen. El nivel de
+    asocia con una brecha 4% menor—, dos no concluyen y ninguna se
+    rechaza. El nivel de
     ciudad no sale del indicador: lo acota la ENDIREH en 96.5% de no denuncia
     (IC 95%: 95.1–97.8%). La recomendación principal no requiere
     cambiar ninguna ley: publicar la llave que une el folio de la llamada con la
@@ -199,7 +200,9 @@ son errores de lectura de las bases.
         #emph[al conductor] y no robo #emph[del vehículo]; el 3 contra el 4, que
         el canal de casa habitación se parece a violencia familiar y no a robo; el
         5 y el 6, dos pares nominalmente obvios que fallan la prueba espacial.
-        Tabla completa en @repo.
+        Los conteos son del delito completo en la ventana, incluidos los eventos
+        que no caen en un AGEB, así que no coinciden con los universos de la
+        Sección IV. Tabla completa en @repo.
       ],
     ) <tab-equiv>
   ],
@@ -283,8 +286,9 @@ el inverso de la suma de la varianza binomial conocida y el componente entre AGE
 asumiendo que el ruido de conteo es binomial; si fuera sobredisperso, la
 ponderación daría demasiado peso a los AGEB chicos y la alternativa sería mínimos
 cuadrados sin pesos, que se corre como sensibilidad. #strong[(iii)] Estandarizo
-con la media y la desviación estándar del universo primario en todas las
-variantes, para que los coeficientes sean comparables entre ellas. #strong[(iv)]
+con la media y la desviación estándar del universo de estimación de la
+especificación primaria en todas las variantes, para que los coeficientes sean
+comparables entre ellas. #strong[(iv)]
 La variante con 19% de robo descontado verifica el signo, no la magnitud: el
 descuento se reparte proporcionalmente a las carpetas de robo a casa habitación,
 que traen su propia estructura socioeconómica.
@@ -367,8 +371,17 @@ brecha centrado en su ventana. La escala es divergente y sus límites son
 visible es ruido de conteo: de una varianza total de 0.361, la parte binomial
 esperada aporta 0.206 y el componente entre AGEB solo 0.102. Con esa escala saturan
 589 de los 2,294 AGEB coloreados (26%), pero solo 99 de los 698 de conteo alto
-(14%), que es justo lo que predice quitar ruido. Los 1,596 AGEB con menos de 12
-carpetas en alguna ventana van rayados y los 139 sin dato, en gris.
+(14%), que es justo lo que predice quitar ruido. Los 139 AGEB sin carpetas en
+alguna ventana van en gris; los 1,596 con menos de 12 carpetas en alguna
+ventana, que son los peor medidos, van rayados en el acercamiento y en las
+versiones de respaldo del repositorio.
+
+S1 se verifica aquí, no solo se declara. Con 19% de robo descontado cambian de
+clasificación 596 de los 2,294 AGEB y #emph[ninguno se invierte]: todos los
+cambios ocurren entre una clase definida y la de «indistinguible de la ciudad»,
+y el orden entre AGEB se mantiene (ρ de Spearman 0.92 y 0.89 por ventana). El
+supuesto más frágil del mapa decide una de cada siete clasificaciones, no su
+forma.
 
 A ojo, el mapa tiene a la vez mosaico fino y zonas amplias del mismo color. El I de
 Moran @moran1950 separa las dos lecturas. Sobre los residuos #emph[dentro] de
@@ -402,9 +415,10 @@ céntrica y de ingreso alto.
   image("../resultados/figuras/2.6_mapa_hero_violencia_familiar.png", width: 100%),
   caption: [
     Brecha entre llamadas al 911 y carpetas de la FGJ por violencia familiar, por
-    AGEB, promedio de las dos ventanas. Escala divergente con límites
-    ±2 desviaciones estándar del modelo. Rayado: menos de 12
-    carpetas en alguna ventana. Gris: sin dato.
+    AGEB, promedio de las dos ventanas, relativa a la del AGEB promedio. Escala
+    divergente con límites ±2 desviaciones estándar del modelo. La
+    línea punteada marca la brecha de la ciudad (×1.13), que pondera
+    por volumen. Gris: sin carpetas en alguna ventana (139 de 2,433).
   ],
 ) <fig-mapa>
 
@@ -413,7 +427,8 @@ céntrica y de ingreso alto.
   caption: [
     Acercamiento de 6 km en el límite de Iztacalco, Iztapalapa y Venustiano
     Carranza, en la misma escala. La ventana se eligió con una regla fijada antes
-    de dibujar, que no mira el color.
+    de dibujar, que no mira el color. Rayado: AGEB con menos de 12 carpetas en
+    alguna ventana.
   ],
 ) <fig-zoom>
 
@@ -676,5 +691,6 @@ o no.
 
 #strong[Reproducibilidad.] Todo el código, las 16 tablas de resultados y las 9
 figuras están en un repositorio público @repo, con las reglas de decisión fechadas
-antes de cada cálculo y una aplicación que permite manipular los supuestos S1 y el
-umbral de conteo sobre el mapa.
+antes de cada cálculo y una aplicación que permite mover S1, la ventana y el umbral de
+conteo sobre el mapa, y ver la asociación de H2 a la escala de su propia
+dispersión.
